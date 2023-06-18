@@ -85,7 +85,7 @@ function lrsc_width_str(width : word_width) -> string =
     BYTE   => ".b",
     HALF   => ".h",
     WORD   => ".w",
-    DOUBLE => ".d"
+    DOUBLE => ".d",
     QUAD   => ".q"
   }
 
@@ -274,7 +274,20 @@ mapping clause encdec = AMO(op, aq, rl, rs2, rs1, size, rd) if amo_width_valid(s
 /* NOTE: Currently, we only EA if address translation is successful.
    This may need revisiting. */
 function clause execute (AMO(op, aq, rl, rs2, rs1, width, rd)) = {
-  if haveAtomics() then {
+  /* AMOCAS instruction requires the first register in the pair to be even numbered;
+   * encodings with odd numbered registers specified in rs2 and rd are reserved.
+   * QUAD width is not supported for RV32 and supported only for AMOCAS for RV64.
+   * DOUBLE width supported only for AMOCAS for RV32.
+   */
+  let is_valid_amocas : bool = match (width, sizeof(xlen), op) {
+    (DOUBLE, 32, AMOCAS) => if rs2[0..0] != 0b0 | rd[0..0] != 0b0 then false else true,
+    (QUAD, 64, AMOCAS) => if rs2[0..0] != 0b0 | rd[0..0] != 0b0 then false else true,
+    (DOUBLE, 32, _) => false,
+    (QUAD, 32, _) => false,
+    (QUAD, 64, _) => false,
+    _ => true
+  };
+  if haveAtomics() & is_valid_amocas then {
     /* Get the address, X(rs1) (no offset).
      * Some extensions perform additional checks on address validity.
      */
@@ -288,7 +301,8 @@ function clause execute (AMO(op, aq, rl, rs2, rs1, width, rd)) = {
               (BYTE, _)    => mem_write_ea(addr, 1, aq & rl, rl, true),
               (HALF, _)    => mem_write_ea(addr, 2, aq & rl, rl, true),
               (WORD, _)    => mem_write_ea(addr, 4, aq & rl, rl, true),
-              (DOUBLE, 64) => mem_write_ea(addr, 8, aq & rl, rl, true),
+              (DOUBLE, _)  => mem_write_ea(addr, 8, aq & rl, rl, true),
+              (QUAD, 64)   => mem_write_ea(addr, 16, aq & rl, rl, true),
               _            => internal_error(__FILE__, __LINE__, "Unexpected AMO width")
             };
             let is_unsigned : bool = match op {
@@ -300,63 +314,116 @@ function clause execute (AMO(op, aq, rl, rs2, rs1, width, rd)) = {
               BYTE   => if is_unsigned then EXTZ(X(rs2)[7..0])  else EXTS(X(rs2)[7..0]),
               HALF   => if is_unsigned then EXTZ(X(rs2)[15..0]) else EXTS(X(rs2)[15..0]),
               WORD   => if is_unsigned then EXTZ(X(rs2)[31..0]) else EXTS(X(rs2)[31..0]),
-              DOUBLE => X(rs2)
+              DOUBLE => X(rs2),
+              QUAD   => X(rs2)
             };
             let rd_val : xlenbits = match width {
               BYTE   => if is_unsigned then EXTZ(X(rd)[7..0])  else EXTS(X(rd)[7..0]),
               HALF   => if is_unsigned then EXTZ(X(rd)[15..0]) else EXTS(X(rd)[15..0]),
               WORD   => if is_unsigned then EXTZ(X(rd)[31..0]) else EXTS(X(rd)[31..0]),
-              DOUBLE => X(rs2)
+              DOUBLE => X(rd),
+              QUAD   => X(rd)
             };
+
+            /* AMOCAS.W for RV32 and AMOCAS.Q for RV64 operate on a pair of
+             * register. When the first register of a source register pair is
+             * x0, then both halves of the pair read as zero.
+             */
+            let rd_plus_one  : bits(5) = 
+              match (width, sizeof(xlen), op) {
+                (DOUBLE, 32, AMOCAS) => if (rd != zreg) then (rd + 1) else zeros(),
+                (QUAD,   64, AMOCAS) => if (rd != zreg) then (rd + 1) else zeros(),
+                _ => zeros()
+              };
+            let rs2_plus_one : bits(5) = 
+              match (width, sizeof(xlen), op) {
+                (DOUBLE, 32, AMOCAS) => if (rs2 != zreg) then (rs2 + 1) else zeros(),
+                (QUAD,   64, AMOCAS) => if (rs2 != zreg) then (rs2 + 1) else zeros(),
+                _ => zeros()
+              };
+            let rd_plus_one_val  : xlenbits = EXTZ(X(rd_plus_one));
+            let rs2_plus_one_val : xlenbits = EXTZ(X(rs2_plus_one));
+
             match (eares) {
               MemException(e) => { handle_mem_exception(addr, e); RETIRE_FAIL },
               MemValue(_) => {
-                let mval : MemoryOpResult(xlenbits) = match (width, sizeof(xlen), op) {
-                  (BYTE, _, _)         => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 1, aq, aq & rl, true)),
-                  (HALF, _, _)         => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 2, aq, aq & rl, true)),
-                  (WORD, _, _)         => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 4, aq, aq & rl, true)),
-                  (DOUBLE, 64, _)      => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 8, aq, aq & rl, true)),
-                  (DOUBLE, 32, AMOCAS) => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 8, aq, aq & rl, true)),
+                let mval_high : MemoryOpResult(xlenbits) = match (width, sizeof(xlen)) {
+                  (DOUBLE, 32) => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr+4, 4, aq, aq & rl, true)),
+                  (QUAD, 64)   => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr+8, 8, aq, aq & rl, true)),
+                  _            => MemValue(zeros())
+                };
+                match (mval_high) {
+                  MemException(e)  => { handle_mem_exception(addr, e) },
+                  MemValue(loaded_high) => {
+                    let result_high : xlenbits =
+                      match (width, sizeof(xlen), op) {
+                        (DOUBLE, 32, AMOCAS) => if (loaded_high == rd_plus_one_val) then rs2_plus_one_val else loaded_high,
+                        (QUAD, 64, AMOCAS) => if (loaded_high == rd_plus_one_val) then rs2_plus_one_val else loaded_high,
+                        _ => zeros()
+                      };
+                    let rval_high : xlenbits =
+                      match (width, sizeof(xlen)) {
+                        (DOUBLE, 32) => loaded_high,
+                        (QUAD, 64)   => loaded_high,
+                        _ => zeros()
+                      };
+                    let wval_high : MemoryOpResult(bool) =
+                      match (width, sizeof(xlen)) {
+                        (DOUBLE, 32) => mem_write_value(addr+4, 4, result_high, aq & rl, rl, true),
+                        (QUAD, 64)   => mem_write_value(addr+8, 8, result_high, aq & rl, rl, true),
+                        _ => MemValue(true)
+                      };
+                    match (wval_high) {
+                      MemValue(true)  => { X(rd_plus_one) = rval_high },
+                      MemValue(false) => { internal_error(__FILE__, __LINE__, "AMO got false from mem_write_value") },
+                      MemException(e) => { handle_mem_exception(addr, e) }
+                    }
+                  }
+                };
+                let mval : MemoryOpResult(xlenbits) = match (width, sizeof(xlen)) {
+                  (BYTE, _)    => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 1, aq, aq & rl, true)),
+                  (HALF, _)    => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 2, aq, aq & rl, true)),
+                  (WORD, _)    => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 4, aq, aq & rl, true)),
+                  (DOUBLE, 64) => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 8, aq, aq & rl, true)),
+                  (DOUBLE, 32) => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 4, aq, aq & rl, true)),
+                  (QUAD, 64)   => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 8, aq, aq & rl, true)),
                   _            => internal_error(__FILE__, __LINE__, "Unexpected AMO width")
                 };
-                let mval1 : MemoryOpResult(xlenbits) = match (width, sizeof(xlen), op) {
-                  (DOUBLE, 32, AMOCAS) => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 8, aq, aq & rl, true)),
-                  _            => zero()
-                }
                 match (mval) {
                   MemException(e)  => { handle_mem_exception(addr, e); RETIRE_FAIL },
                   MemValue(loaded) => {
                     let result : xlenbits =
-                      match (width, sizeof(xlen), op) {
-                        (_, _, AMOSWAP)      => rs2_val,
-                        (_, _, AMOADD)       => rs2_val + loaded,
-                        (_, _, AMOXOR)       => rs2_val ^ loaded,
-                        (_, _, AMOAND)       => rs2_val & loaded,
-                        (_, _, AMOOR)        => rs2_val | loaded,
-                        (DOUBLE, 64, AMOCAS) => if (loaded == rd_val) rs2_val else loaded,
-                        (DOUBLE, 32, AMOCAS) => if (loaded == rd_val) rs2_val else loaded,
+                      match op {
+                        AMOSWAP => rs2_val,
+                        AMOADD  => rs2_val + loaded,
+                        AMOXOR  => rs2_val ^ loaded,
+                        AMOAND  => rs2_val & loaded,
+                        AMOOR   => rs2_val | loaded,
+                        AMOCAS  => if (loaded == rd_val) then rs2_val else loaded,
 
                         /* These operations convert bitvectors to integer values using [un]signed,
                          * and back using to_bits().
                          */
-                        (_, AMOMIN,  _) => to_bits(sizeof(xlen), min(signed(rs2_val),   signed(loaded))),
-                        (_, AMOMAX,  _) => to_bits(sizeof(xlen), max(signed(rs2_val),   signed(loaded))),
-                        (_, AMOMINU, _) => to_bits(sizeof(xlen), min(unsigned(rs2_val), unsigned(loaded))),
-                        (_, AMOMAXU, _) => to_bits(sizeof(xlen), max(unsigned(rs2_val), unsigned(loaded)))
+                        AMOMIN  => to_bits(sizeof(xlen), min(signed(rs2_val),   signed(loaded))),
+                        AMOMAX  => to_bits(sizeof(xlen), max(signed(rs2_val),   signed(loaded))),
+                        AMOMINU => to_bits(sizeof(xlen), min(unsigned(rs2_val), unsigned(loaded))),
+                        AMOMAXU => to_bits(sizeof(xlen), max(unsigned(rs2_val), unsigned(loaded)))
                       };
                     let rval : xlenbits = match width {
                       BYTE   => EXTS(loaded[7..0]),
                       HALF   => EXTS(loaded[15..0]),
                       WORD   => EXTS(loaded[31..0]),
-                      DOUBLE => loaded
+                      DOUBLE => loaded,
+                      QUAD   => loaded
                     };
-                    let wval : MemoryOpResult(bool) = match (width, sizeof(xlen), op) {
-                      (BYTE, _, _)         => mem_write_value(addr, 1, result[7..0],  aq & rl, rl, true),
-                      (HALF, _, _)         => mem_write_value(addr, 2, result[15..0], aq & rl, rl, true),
-                      (WORD, _, _)         => mem_write_value(addr, 4, result[31..0], aq & rl, rl, true),
-                      (DOUBLE, 64, _)      => mem_write_value(addr, 8, result,        aq & rl, rl, true),
-                      (DOUBLE, 32, AMOCAS) => mem_write_value(addr, 8, result,        aq & rl, rl, true),
-                      _                    => internal_error(__FILE__, __LINE__, "Unexpected AMO width")
+                    let wval : MemoryOpResult(bool) = match (width, sizeof(xlen)) {
+                      (BYTE, _)    => mem_write_value(addr,  1, result[7..0],  aq & rl, rl, true),
+                      (HALF, _)    => mem_write_value(addr,  2, result[15..0], aq & rl, rl, true),
+                      (WORD, _)    => mem_write_value(addr,  4, result[31..0], aq & rl, rl, true),
+                      (DOUBLE, 64) => mem_write_value(addr,  8, result,        aq & rl, rl, true),
+                      (DOUBLE, 32) => mem_write_value(addr,  4, result,        aq & rl, rl, true),
+                      (QUAD, 64)   => mem_write_value(addr,  8, result,        aq & rl, rl, true),
+                      _            => internal_error(__FILE__, __LINE__, "Unexpected AMO width")
                     };
                     match (wval) {
                       MemValue(true)  => { X(rd) = rval; RETIRE_SUCCESS },
@@ -386,7 +453,7 @@ mapping amo_mnemonic : amoop <-> string = {
   AMOMIN  <-> "amomin",
   AMOMAX  <-> "amomax",
   AMOMINU <-> "amominu",
-  AMOMAXU <-> "amomaxu"
+  AMOMAXU <-> "amomaxu",
   AMOCAS  <-> "amocas"
 }
 
