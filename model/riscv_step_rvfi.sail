@@ -83,6 +83,7 @@ val ext_init : unit -> unit effect {wreg}
 function ext_init() = {
   init_base_regs();
   init_fdext_regs();
+  init_zicfisslp_regs();
   /* these are here so that the C backend doesn't prune them out. */
   // let _ = rvfi_step(0);
   ext_rvfi_init();

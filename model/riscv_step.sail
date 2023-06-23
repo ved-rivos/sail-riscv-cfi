@@ -104,7 +104,9 @@ function step(step_no : int) -> bool = {
           },
           /* standard error */
           F_Error(e, addr) => {
-            handle_mem_exception(addr, e);
+            if e == E_Illegal_Instr()
+            then handle_illegal()
+            else handle_mem_exception(addr, e);
             (RETIRE_FAIL, false)
           },
           /* non-error cases: */

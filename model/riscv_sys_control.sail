@@ -100,6 +100,11 @@ function is_CSR_defined (csr : csreg, p : Privilege) -> bool =
     0x343 => p == Machine, // mtval
     0x344 => p == Machine, // mip
 
+    0x30A => p == Machine,                        // menvcfg
+    0x31A => p == Machine & (sizeof(xlen) == 32), // menvcfgh
+    0x747 => p == Machine,                        // mseccfg
+    0x757 => p == Machine & (sizeof(xlen) == 32), // mseccfgh
+
     0x3A0 => p == Machine,                        // pmpcfg0
     0x3A1 => p == Machine & (sizeof(xlen) == 32), // pmpcfg1
     0x3A2 => p == Machine,                        // pmpcfg2
@@ -486,6 +491,12 @@ function exception_handler(cur_priv : Privilege, ctl : ctl_result,
       if   cur_privilege != Machine
       then mstatus->MPRV() = 0b0;
 
+      /* update expected landing pad stack in mstatus */
+      if haveZicfisslp() then {
+          elp = mstatus.MPELP();
+          mstatus = update_MPELP(mstatus, NO_LP_EXPECTED);
+      };
+
       if   get_config_print_reg()
       then print_reg("CSR mstatus <- " ^ BitStr(mstatus.bits()));
       if   get_config_print_platform()
@@ -502,6 +513,12 @@ function exception_handler(cur_priv : Privilege, ctl : ctl_result,
       mstatus->SPP()  = 0b0;
       if   cur_privilege != Machine
       then mstatus->MPRV() = 0b0;
+
+      /* update expected landing pad stack in mstatus */
+      if haveZicfisslp() then {
+          elp = mstatus.SPELP();
+          mstatus = update_SPELP(mstatus, NO_LP_EXPECTED);
+      };
 
       if   get_config_print_reg()
       then print_reg("CSR mstatus <- " ^ BitStr(mstatus.bits()));

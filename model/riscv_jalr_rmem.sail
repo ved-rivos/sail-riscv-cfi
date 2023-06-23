@@ -76,5 +76,7 @@ function clause execute (RISCV_JALR(imm, rs1, rd)) = {
   X(rd) = nextPC; /* compatible with JALR, C.JR and C.JALR */
   let newPC : xlenbits = X(rs1) + EXTS(imm);
   nextPC = [newPC with 0 = bitzero];  /* Clear newPC[0] */
+  /* update expected landing pad state if forward-edge CFI is active */
+  update_elp(rs1, rd);
   RETIRE_SUCCESS
 }

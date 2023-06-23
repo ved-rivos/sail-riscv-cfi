@@ -77,7 +77,12 @@ function ext_check_xret_priv (p : Privilege) : Privilege -> bool = true
 /* Called if above check fails */
 function ext_fail_xret_priv () : unit -> unit = ()
 
-function handle_trap_extension(p : Privilege, pc : xlenbits, u : option(unit)) -> unit = ()
+function handle_trap_extension(p : Privilege, pc : xlenbits, u : option(unit)) -> unit =
+  match p {
+    Machine    => { mstatus = update_MPELP(mstatus, elp); elp = NO_LP_EXPECTED },
+    Supervisor => { mstatus = update_SPELP(mstatus, elp); elp = NO_LP_EXPECTED },
+    User       => { mstatus = update_SPELP(mstatus, elp); elp = NO_LP_EXPECTED }
+  }
 
 /* used for traps and ECALL */
 function prepare_trap_vector(p : Privilege, cause : Mcause) -> xlenbits = {

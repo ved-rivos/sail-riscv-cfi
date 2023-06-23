@@ -72,7 +72,32 @@
 
 function ext_init() -> unit = ()
 
-function ext_fetch_hook(f : FetchResult) -> FetchResult = f
+function ext_fetch_hook(f : FetchResult) -> FetchResult = {
+  match f {
+    F_RVC(h)         => {
+      /* non landing pad inst when landing pad expected are illegal */
+      if is_lp_expected() then {
+        F_Error(E_Illegal_Instr(), EXTZ(0b0))
+      } else {
+        f
+      }
+    },
+    F_Base(h)        => {
+      /* non landing pad inst when landing pad expected are illegal */
+      if is_valid_lpad(EXTZ(h)) then {
+        F_Error(E_Illegal_Instr(), EXTZ(0b0))
+      } else {
+        f
+      }
+    },
+    F_Ext_Error(e)   => {
+      f
+    },
+    F_Error(e, addr) => {
+      f
+    },
+  }
+}
 
 function ext_pre_step_hook()  -> unit = ()
 function ext_post_step_hook() -> unit = ()

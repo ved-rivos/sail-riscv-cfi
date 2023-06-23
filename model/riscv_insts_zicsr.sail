@@ -107,6 +107,11 @@ function readCSR csr : csreg -> xlenbits = {
     (0x343,  _) => mtval,
     (0x344,  _) => mip.bits(),
 
+    (0x30A,  _) => menvcfg.bits()[(sizeof(xlen) - 1) .. 0], // menvcfg
+    (0x31A, 32) => menvcfg.bits()[63 .. 32],                // menvcfgh
+    (0x747,  _) => mseccfg.bits()[(sizeof(xlen) - 1) .. 0], // mseccfg
+    (0x757, 32) => mseccfg.bits()[63 .. 32],                // mseccfgh
+
     (0x3A0,  _) => pmpReadCfgReg(0),           // pmpcfg0
     (0x3A1, 32) => pmpReadCfgReg(1),           // pmpcfg1
     (0x3A2,  _) => pmpReadCfgReg(2),           // pmpcfg2
@@ -194,7 +199,11 @@ function writeCSR (csr : csreg, value : xlenbits) -> unit = {
     (0x343,  _) => { mtval = value; Some(mtval) },
     (0x344,  _) => { mip = legalize_mip(mip, value); Some(mip.bits()) },
 
-    // Note: Some(value) returned below is not the legalized value due to locked entries
+    (0x30A,  _) => { menvcfg = legalize_menvcfg(menvcfg, value); Some(menvcfg.bits()[sizeof(xlen) - 1 .. 0]) },
+    (0x31A, 32) => { menvcfg = legalize_menvcfg_high(menvcfg, value); Some(menvcfg.bits()[63 .. 32]) },
+    (0x747,  _) => { mseccfg = legalize_mseccfg(mseccfg, value); Some(mseccfg.bits()[sizeof(xlen) - 1 .. 0]) },
+    (0x757, 32) => { mseccfg = legalize_mseccfg_high(mseccfg, value); Some(mseccfg.bits()[63 .. 32]) },
+
     (0x3A0,  _) => { pmpWriteCfgReg(0, value); Some(pmpReadCfgReg(0)) },  // pmpcfg0
     (0x3A1, 32) => { pmpWriteCfgReg(1, value); Some(pmpReadCfgReg(1)) },  // pmpcfg1
     (0x3A2,  _) => { pmpWriteCfgReg(2, value); Some(pmpReadCfgReg(2)) },  // pmpcfg2

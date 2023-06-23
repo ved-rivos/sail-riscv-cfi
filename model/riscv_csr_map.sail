@@ -127,6 +127,11 @@ mapping clause csr_name_map = 0x304  <-> "mie"
 mapping clause csr_name_map = 0x305  <-> "mtvec"
 mapping clause csr_name_map = 0x306  <-> "mcounteren"
 mapping clause csr_name_map = 0x320  <-> "mcountinhibit"
+/* machine configuration */
+mapping clause csr_name_map = 0x30A  <-> "menvcfg"
+mapping clause csr_name_map = 0x31A  <-> "menvcfgh"
+mapping clause csr_name_map = 0x747  <-> "mseccfg"
+mapping clause csr_name_map = 0x757  <-> "mseccfgh"
 /* machine trap handling */
 mapping clause csr_name_map = 0x340  <-> "mscratch"
 mapping clause csr_name_map = 0x341  <-> "mepc"

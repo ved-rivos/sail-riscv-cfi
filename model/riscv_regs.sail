@@ -342,3 +342,18 @@ function init_base_regs () = {
   x30 = zero_reg;
   x31 = zero_reg
 }
+
+
+/* shadow stack pointer */
+register ssp       : xlenbits
+
+/* expected landing pad state */
+let NO_LP_EXPECTED : bits(1) = 0b0  /* Landing pad expected */
+let LP_EXPECTED    : bits(1) = 0b1  /* No landing pad expected */
+register elp       : bits(1)
+
+val init_zicfisslp_regs : unit -> unit effect {wreg}
+function init_zicfisslp_regs () = {
+  ssp = zero_reg;
+  elp = NO_LP_EXPECTED
+}
