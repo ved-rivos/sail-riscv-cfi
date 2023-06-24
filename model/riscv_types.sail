@@ -193,7 +193,12 @@ union AccessType ('a : Type) = {
   Read      : 'a,
   Write     : 'a,
   ReadWrite : ('a, 'a),
-  Execute   : unit
+  Execute   : unit,
+ 
+  /* Access types for shadow stack */
+  SSRead      : 'a,
+  SSWrite     : 'a,
+  SSReadWrite : ('a, 'a)
 }
 
 enum word_width = {BYTE, HALF, WORD, DOUBLE}

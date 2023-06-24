@@ -106,7 +106,8 @@ function isPTEPtr(p : pteAttribs, ext : extPte) -> bool = {
 
 function isInvalidPTE(p : pteAttribs, ext : extPte) -> bool = {
   let a = Mk_PTE_Bits(p);
-  a.V() == 0b0 | (a.W() == 0b1 & a.R() == 0b0)
+  if not(haveZicfisslp()) then a.V() == 0b0 | (a.W() == 0b1 & a.R() == 0b0)
+  else                         a.V() == 0b0 | (a.R() == 0b0 & a.W() == 0b1 & a.X() == 0b1)
 }
 
 union PTE_Check = {
@@ -117,23 +118,32 @@ union PTE_Check = {
 function to_pte_check(b : bool) -> PTE_Check =
   if b then PTE_Check_Success(()) else PTE_Check_Failure((), ())
 
+function is_ss_pte(p : PTE_Bits) -> bool =
+  (p.R() == 0b0 & p.W() == 0b1 & p.X() == 0b0 & haveZicfisslp())
+
 /* For extensions: this function gets the extension-available bits of the PTE in extPte,
  * and the accumulated information of the page-table-walk in ext_ptw.  It should return
  * the updated ext_ptw in both the success and failure cases.
  */
 function checkPTEPermission(ac : AccessType(ext_access_type), priv : Privilege, mxr : bool, do_sum : bool, p : PTE_Bits, ext : extPte, ext_ptw : ext_ptw) -> PTE_Check = {
   match (ac, priv) {
-    (Read(_),         User)       => to_pte_check(p.U() == 0b1 & (p.R() == 0b1 | (p.X() == 0b1 & mxr))),
-    (Write(_),        User)       => to_pte_check(p.U() == 0b1 & p.W() == 0b1),
-    (ReadWrite(_, _), User)       => to_pte_check(p.U() == 0b1 & p.W() == 0b1 & (p.R() == 0b1 | (p.X() == 0b1 & mxr))),
-    (Execute(),       User)       => to_pte_check(p.U() == 0b1 & p.X() == 0b1),
+    (Read(_),           User)       => to_pte_check(p.U() == 0b1 & (p.R() == 0b1 | (p.X() == 0b1 & mxr) | is_ss_pte(p))),
+    (Write(_),          User)       => to_pte_check(p.U() == 0b1 & p.W() == 0b1 & not(is_ss_pte(p))),
+    (ReadWrite(_, _),   User)       => to_pte_check(p.U() == 0b1 & p.W() == 0b1 & (p.R() == 0b1 | (p.X() == 0b1 & mxr))),
+    (SSRead(_),         User)       => to_pte_check(p.U() == 0b1 & is_ss_pte(p)),
+    (SSWrite(_),        User)       => to_pte_check(p.U() == 0b1 & is_ss_pte(p)),
+    (SSReadWrite(_, _), User)       => to_pte_check(p.U() == 0b1 & is_ss_pte(p)),
+    (Execute(),         User)       => to_pte_check(p.U() == 0b1 & p.X() == 0b1),
 
-    (Read(_),         Supervisor) => to_pte_check((p.U() == 0b0 | do_sum) & (p.R() == 0b1 | (p.X() == 0b1 & mxr))),
-    (Write(_),        Supervisor) => to_pte_check((p.U() == 0b0 | do_sum) & p.W() == 0b1),
-    (ReadWrite(_, _), Supervisor) => to_pte_check((p.U() == 0b0 | do_sum) & p.W() == 0b1 & (p.R() == 0b1 | (p.X() == 0b1 & mxr))),
-    (Execute(),       Supervisor) => to_pte_check(p.U() == 0b0 & p.X() == 0b1),
+    (Read(_),           Supervisor) => to_pte_check((p.U() == 0b0 | do_sum) & (p.R() == 0b1 | (p.X() == 0b1 & mxr)) | is_ss_pte(p)),
+    (Write(_),          Supervisor) => to_pte_check((p.U() == 0b0 | do_sum) & p.W() == 0b1 & not(is_ss_pte(p))),
+    (ReadWrite(_, _),   Supervisor) => to_pte_check((p.U() == 0b0 | do_sum) & p.W() == 0b1 & (p.R() == 0b1 | (p.X() == 0b1 & mxr))),
+    (SSRead(_),         Supervisor) => to_pte_check((p.U() == 0b0 | do_sum) & is_ss_pte(p)),
+    (SSWrite(_),        Supervisor) => to_pte_check((p.U() == 0b0 | do_sum) & is_ss_pte(p)),
+    (SSReadWrite(_, _), Supervisor) => to_pte_check((p.U() == 0b0 | do_sum) & is_ss_pte(p)),
+    (Execute(),         Supervisor) => to_pte_check(p.U() == 0b0 & p.X() == 0b1),
 
-    (_,               Machine)    => internal_error(__FILE__, __LINE__, "m-mode mem perm check")
+    (_,                 Machine)    => internal_error(__FILE__, __LINE__, "m-mode mem perm check")
   }
 }
 
@@ -142,7 +152,10 @@ function update_PTE_Bits(p : PTE_Bits, a : AccessType(ext_access_type), ext : ex
                                   Execute() => false,
                                   Read() => false,
                                   Write(_) => true,
-                                  ReadWrite(_,_) => true
+                                  ReadWrite(_,_) => true,
+                                  SSRead() => false,
+                                  SSWrite(_) => true,
+                                  SSReadWrite(_,_) => true
                                 });
 
   let update_a = p.A() == 0b0;                                                   // accessed-bit

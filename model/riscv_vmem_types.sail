@@ -82,6 +82,9 @@ function accessType_to_str (a) =
     Read(_)            => "R",
     Write(_)           => "W",
     ReadWrite(_, _)    => "RW",
+    SSRead(_)          => "SS_R",
+    SSWrite(_)         => "SS_W",
+    SSReadWrite(_, _)  => "SS_RW",
     Execute()          => "X"
   }
 

@@ -95,25 +95,31 @@ function pmpAddrRange(cfg: Pmpcfg_ent, pmpaddr: xlenbits, prev_pmpaddr: xlenbits
 }
 
 /* permission checks */
+function is_ss_pmp(pmp_ent_num : bits(6) ) -> bool = {
+    haveZicfisslp() & (mseccfg.SSPMP() == pmp_ent_num) & (pmp_ent_num != 0b000000);
+}
 
-val pmpCheckRWX: (Pmpcfg_ent, AccessType(ext_access_type)) -> bool
-function pmpCheckRWX(ent, acc) = {
+val pmpCheckRWX: (Pmpcfg_ent, AccessType(ext_access_type), bits(6)) -> bool
+function pmpCheckRWX(ent, acc, pmp_ent_num) = {
   match acc {
-    Read(_)      => ent.R() == 0b1,
-    Write(_)     => ent.W() == 0b1,
-    ReadWrite(_) => ent.R() == 0b1 & ent.W() == 0b1,
-    Execute()    => ent.X() == 0b1
+    Read(_)        => ent.R() == 0b1,
+    Write(_)       => ent.W() == 0b1 & not(is_ss_pmp(pmp_ent_num)),
+    ReadWrite(_)   => ent.R() == 0b1 & ent.W() == 0b1 & not(is_ss_pmp(pmp_ent_num)),
+    SSRead(_)      => ent.R() == 0b1 & is_ss_pmp(pmp_ent_num),
+    SSWrite(_)     => ent.W() == 0b1 & is_ss_pmp(pmp_ent_num),
+    SSReadWrite(_) => ent.R() == 0b1 & ent.W() == 0b1 & is_ss_pmp(pmp_ent_num),
+    Execute()      => ent.X() == 0b1
   }
 }
 
 // this needs to be called with the effective current privilege.
-val pmpCheckPerms: (Pmpcfg_ent, AccessType(ext_access_type), Privilege) -> bool
-function pmpCheckPerms(ent, acc, priv) = {
+val pmpCheckPerms: (Pmpcfg_ent, AccessType(ext_access_type), Privilege, bits(6)) -> bool
+function pmpCheckPerms(ent, acc, priv, pmp_ent_num) = {
   match priv {
     Machine => if   pmpLocked(ent)
-               then pmpCheckRWX(ent, acc)
+               then pmpCheckRWX(ent, acc, pmp_ent_num)
                else true,
-    _       => pmpCheckRWX(ent, acc)
+    _       => pmpCheckRWX(ent, acc, 0b000000)
   }
 }
 
@@ -139,12 +145,13 @@ function pmpMatchAddr(addr: xlenbits, width: xlenbits, rng: pmp_addr_range) -> p
 enum pmpMatch = {PMP_Success, PMP_Continue, PMP_Fail}
 
 function pmpMatchEntry(addr: xlenbits, width: xlenbits, acc: AccessType(ext_access_type), priv: Privilege,
-                       ent: Pmpcfg_ent, pmpaddr: xlenbits, prev_pmpaddr: xlenbits) -> pmpMatch = {
+                       ent: Pmpcfg_ent, pmpaddr: xlenbits, prev_pmpaddr:
+                       xlenbits, pmp_ent_num : bits(6)) -> pmpMatch = {
   let rng = pmpAddrRange(ent, pmpaddr, prev_pmpaddr);
   match pmpMatchAddr(addr, width, rng) {
     PMP_NoMatch      => PMP_Continue,
     PMP_PartialMatch => PMP_Fail,
-    PMP_Match        => if   pmpCheckPerms(ent, acc, priv)
+    PMP_Match        => if   pmpCheckPerms(ent, acc, priv, pmp_ent_num)
                         then PMP_Success
                         else PMP_Fail
   }
@@ -156,67 +163,67 @@ function pmpCheck forall 'n, 'n > 0. (addr: xlenbits, width: atom('n), acc: Acce
                   -> option(ExceptionType) = {
   let width : xlenbits = to_bits(sizeof(xlen), width);
   let check : bool =
-  match pmpMatchEntry(addr, width, acc, priv, pmp0cfg, pmpaddr0, zeros()) {
+  match pmpMatchEntry(addr, width, acc, priv, pmp0cfg, pmpaddr0, zeros(), 0b000000) {
     PMP_Success  => true,
     PMP_Fail     => false,
     PMP_Continue =>
-  match pmpMatchEntry(addr, width, acc, priv, pmp1cfg, pmpaddr1, pmpaddr0) {
+  match pmpMatchEntry(addr, width, acc, priv, pmp1cfg, pmpaddr1, pmpaddr0, 0b000001) {
     PMP_Success  => true,
     PMP_Fail     => false,
     PMP_Continue =>
-  match pmpMatchEntry(addr, width, acc, priv, pmp2cfg, pmpaddr2, pmpaddr1) {
+  match pmpMatchEntry(addr, width, acc, priv, pmp2cfg, pmpaddr2, pmpaddr1, 0b000010) {
     PMP_Success  => true,
     PMP_Fail     => false,
     PMP_Continue =>
-  match pmpMatchEntry(addr, width, acc, priv, pmp3cfg, pmpaddr3, pmpaddr2) {
+  match pmpMatchEntry(addr, width, acc, priv, pmp3cfg, pmpaddr3, pmpaddr2, 0b000011) {
     PMP_Success  => true,
     PMP_Fail     => false,
     PMP_Continue =>
-  match pmpMatchEntry(addr, width, acc, priv, pmp4cfg, pmpaddr4, pmpaddr3) {
+  match pmpMatchEntry(addr, width, acc, priv, pmp4cfg, pmpaddr4, pmpaddr3, 0b000100) {
     PMP_Success  => true,
     PMP_Fail     => false,
     PMP_Continue =>
-  match pmpMatchEntry(addr, width, acc, priv, pmp5cfg, pmpaddr5, pmpaddr4) {
+  match pmpMatchEntry(addr, width, acc, priv, pmp5cfg, pmpaddr5, pmpaddr4, 0b000101) {
     PMP_Success  => true,
     PMP_Fail     => false,
     PMP_Continue =>
-  match pmpMatchEntry(addr, width, acc, priv, pmp6cfg, pmpaddr6, pmpaddr5) {
+  match pmpMatchEntry(addr, width, acc, priv, pmp6cfg, pmpaddr6, pmpaddr5, 0b000110) {
     PMP_Success  => true,
     PMP_Fail     => false,
     PMP_Continue =>
-  match pmpMatchEntry(addr, width, acc, priv, pmp7cfg, pmpaddr7, pmpaddr6) {
+  match pmpMatchEntry(addr, width, acc, priv, pmp7cfg, pmpaddr7, pmpaddr6, 0b000111) {
     PMP_Success  => true,
     PMP_Fail     => false,
     PMP_Continue =>
-  match pmpMatchEntry(addr, width, acc, priv, pmp8cfg, pmpaddr8, pmpaddr7) {
+  match pmpMatchEntry(addr, width, acc, priv, pmp8cfg, pmpaddr8, pmpaddr7, 0b001000) {
     PMP_Success  => true,
     PMP_Fail     => false,
     PMP_Continue =>
-  match pmpMatchEntry(addr, width, acc, priv, pmp9cfg, pmpaddr9, pmpaddr8) {
+  match pmpMatchEntry(addr, width, acc, priv, pmp9cfg, pmpaddr9, pmpaddr8, 0b001001) {
     PMP_Success  => true,
     PMP_Fail     => false,
     PMP_Continue =>
-  match pmpMatchEntry(addr, width, acc, priv, pmp10cfg, pmpaddr10, pmpaddr9) {
+  match pmpMatchEntry(addr, width, acc, priv, pmp10cfg, pmpaddr10, pmpaddr9, 0b001010) {
     PMP_Success  => true,
     PMP_Fail     => false,
     PMP_Continue =>
-  match pmpMatchEntry(addr, width, acc, priv, pmp11cfg, pmpaddr11, pmpaddr10) {
+  match pmpMatchEntry(addr, width, acc, priv, pmp11cfg, pmpaddr11, pmpaddr10, 0b001011) {
     PMP_Success  => true,
     PMP_Fail     => false,
     PMP_Continue =>
-  match pmpMatchEntry(addr, width, acc, priv, pmp12cfg, pmpaddr12, pmpaddr11) {
+  match pmpMatchEntry(addr, width, acc, priv, pmp12cfg, pmpaddr12, pmpaddr11, 0b001100) {
     PMP_Success  => true,
     PMP_Fail     => false,
     PMP_Continue =>
-  match pmpMatchEntry(addr, width, acc, priv, pmp13cfg, pmpaddr13, pmpaddr12) {
+  match pmpMatchEntry(addr, width, acc, priv, pmp13cfg, pmpaddr13, pmpaddr12, 0b001101) {
     PMP_Success  => true,
     PMP_Fail     => false,
     PMP_Continue =>
-  match pmpMatchEntry(addr, width, acc, priv, pmp14cfg, pmpaddr14, pmpaddr13) {
+  match pmpMatchEntry(addr, width, acc, priv, pmp14cfg, pmpaddr14, pmpaddr13, 0b001110) {
     PMP_Success  => true,
     PMP_Fail     => false,
     PMP_Continue =>
-  match pmpMatchEntry(addr, width, acc, priv, pmp15cfg, pmpaddr15, pmpaddr14) {
+  match pmpMatchEntry(addr, width, acc, priv, pmp15cfg, pmpaddr15, pmpaddr14, 0b001111) {
     PMP_Success  => true,
     PMP_Fail     => false,
     PMP_Continue => match priv {
@@ -228,10 +235,13 @@ function pmpCheck forall 'n, 'n > 0. (addr: xlenbits, width: atom('n), acc: Acce
   if   check
   then None()
   else match acc {
-    Read(_)      => Some(E_Load_Access_Fault()),
-    Write(_)     => Some(E_SAMO_Access_Fault()),
-    ReadWrite(_) => Some(E_SAMO_Access_Fault()),
-    Execute()    => Some(E_Fetch_Access_Fault())
+    Read(_)        => Some(E_Load_Access_Fault()),
+    Write(_)       => Some(E_SAMO_Access_Fault()),
+    ReadWrite(_)   => Some(E_SAMO_Access_Fault()),
+    Execute()      => Some(E_Fetch_Access_Fault()),
+    SSRead(_)      => Some(E_Load_Access_Fault()),
+    SSWrite(_)     => Some(E_SAMO_Access_Fault()),
+    SSReadWrite(_) => Some(E_SAMO_Access_Fault()),
   }
 }
 
