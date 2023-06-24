@@ -902,7 +902,7 @@ function legalize_mseccfg_high(c : MSecCfg, value : xlenbits) -> MSecCfg = {
 }
 
 function legalize_mseccfg(c : MSecCfg, value : xlenbits) -> MSecCfg = {
-  let m = Mk_MSecCfg(value);
+  let m = Mk_MSecCfg(EXTZ(value));
   /* Hardwired to zero in the absence of zicfisslp */
   let m = if not(haveZicfisslp()) then {
              let m = update_MFCFIE(m, 0b0);
