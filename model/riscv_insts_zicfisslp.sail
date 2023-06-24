@@ -1,0 +1,246 @@
+/*=======================================================================================*/
+/*  RISCV Sail Model                                                                     */
+/*                                                                                       */
+/*  This Sail RISC-V architecture model, comprising all files and                        */
+/*  directories except for the snapshots of the Lem and Sail libraries                   */
+/*  in the prover_snapshots directory (which include copies of their                     */
+/*  licences), is subject to the BSD two-clause licence below.                           */
+/*                                                                                       */
+/*  Copyright (c) 2017-2023                                                              */
+/*    Prashanth Mundkur                                                                  */
+/*    Rishiyur S. Nikhil and Bluespec, Inc.                                              */
+/*    Jon French                                                                         */
+/*    Brian Campbell                                                                     */
+/*    Robert Norton-Wright                                                               */
+/*    Alasdair Armstrong                                                                 */
+/*    Thomas Bauereiss                                                                   */
+/*    Shaked Flur                                                                        */
+/*    Christopher Pulte                                                                  */
+/*    Peter Sewell                                                                       */
+/*    Alexander Richardson                                                               */
+/*    Hesham Almatary                                                                    */
+/*    Jessica Clarke                                                                     */
+/*    Microsoft, for contributions by Robert Norton-Wright and Nathaniel Wesley Filardo  */
+/*    Peter Rugg                                                                         */
+/*    Aril Computer Corp., for contributions by Scott Johnson                            */
+/*    Philipp Tomsich                                                                    */
+/*    VRULL GmbH, for contributions by its employees                                     */
+/*                                                                                       */
+/*  All rights reserved.                                                                 */
+/*                                                                                       */
+/*  This software was developed by the above within the Rigorous                         */
+/*  Engineering of Mainstream Systems (REMS) project, partly funded by                   */
+/*  EPSRC grant EP/K008528/1, at the Universities of Cambridge and                       */
+/*  Edinburgh.                                                                           */
+/*                                                                                       */
+/*  This software was developed by SRI International and the University of               */
+/*  Cambridge Computer Laboratory (Department of Computer Science and                    */
+/*  Technology) under DARPA/AFRL contract FA8650-18-C-7809 ("CIFV"), and                 */
+/*  under DARPA contract HR0011-18-C-0016 ("ECATS") as part of the DARPA                 */
+/*  SSITH research programme.                                                            */
+/*                                                                                       */
+/*  This project has received funding from the European Research Council                 */
+/*  (ERC) under the European Union’s Horizon 2020 research and innovation                */
+/*  programme (grant agreement 789108, ELVER).                                           */
+/*                                                                                       */
+/*                                                                                       */
+/*  Redistribution and use in source and binary forms, with or without                   */
+/*  modification, are permitted provided that the following conditions                   */
+/*  are met:                                                                             */
+/*  1. Redistributions of source code must retain the above copyright                    */
+/*     notice, this list of conditions and the following disclaimer.                     */
+/*  2. Redistributions in binary form must reproduce the above copyright                 */
+/*     notice, this list of conditions and the following disclaimer in                   */
+/*     the documentation and/or other materials provided with the                        */
+/*     distribution.                                                                     */
+/*                                                                                       */
+/*  THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS''                   */
+/*  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED                    */
+/*  TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A                      */
+/*  PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR                  */
+/*  CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,                         */
+/*  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT                     */
+/*  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF                     */
+/*  USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND                  */
+/*  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,                   */
+/*  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT                   */
+/*  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF                   */
+/*  SUCH DAMAGE.                                                                         */
+/*=======================================================================================*/
+
+/* ****************************************************************** */
+/* This file specifies the instructions in the 'Zicfisslp' extension.     */
+
+/* ****************************************************************** */
+/* Forward-edge CFI: Landing pads */
+function is_forward_cfi_active() -> bool = {
+  if cur_privilege == Machine 
+    then mseccfg.MFCFIE() == 0b1
+  else if cur_privilege == Supervisor 
+    then (menvcfg.CFIE() == 0b1 & menvcfg.SFCFIE() == 0b1)
+  else 
+    (menvcfg.CFIE() == 0b1 & mstatus.UFCFIE() == 0b1)
+}
+
+function update_elp(rs1_reg : regidx, rd_reg : regidx) -> unit = {
+  /* 
+   * c.jr expands to jalr x0, 0(rs1) and c.jalr expands to jalr x1, 0(rs1)
+   * So only invocations from uncompressed jalr can result in sw guarded jumps
+   */
+  let is_sw_guarded_jump    : bool = ((rs1_reg == 0b00111) & (rd_reg == 0b00111));
+  let is_indirect_call_jump : bool = (((rs1_reg != 0b00001) & (rs1_reg != 0b00101)) | (rd_reg != 0b00000));
+
+  if is_indirect_call_jump == true & is_sw_guarded_jump == false & is_forward_cfi_active()
+    then elp = LP_EXPECTED;
+}
+
+function is_lp_expected() -> bool = {
+    is_forward_cfi_active() & (elp == LP_EXPECTED)
+}
+
+function is_valid_lpad(lp : xlenbits) -> bool = {
+    /* landing pad is a AUIPC with rd=x0 */
+    let lpad_op : bits(7)  = lp[6 .. 0];
+    let rd_reg  : regidx   = lp[11.. 7];
+
+    /* bits 31:12 of AUIPIC with rd=x0 is the landing pad label */
+    let lpl     : bits(20) = lp[31..12];
+    /* expected label is in x7 bits 31:12 */
+    let exp_lbl : bits(20) = x7[31..12];
+
+    if is_forward_cfi_active() == false
+      then true
+    else if elp != LP_EXPECTED
+      then true
+    else if PC[1 .. 0] != 0b00
+      then false
+    else if ((lpad_op != 0b0010111) | (rd_reg != 0b00000))
+      then false
+    else if ((lpl != exp_lbl) & (lpl != 0b00000000000000000000))
+      then false
+    else {elp = NO_LP_EXPECTED; true};
+}
+/* ****************************************************************** */
+function is_backward_cfi_active() -> bool = {
+  if cur_privilege == Machine 
+    then true
+  else if cur_privilege == Supervisor 
+    then (menvcfg.CFIE() == 0b1)
+  else 
+    (menvcfg.CFIE() == 0b1 & mstatus.UBCFIE() == 0b1)
+}
+/* Backward-edge CFI: Shadow stack */
+union clause ast = ZICFISSLP_SSLOAD : (regidx)
+union clause ast = ZICFISSLP_SSPOPCHK : (regidx)
+union clause ast = ZICFISSLP_SSPINC : (bits(5))
+union clause ast = ZICFISSLP_SSPUSH : (regidx)
+
+mapping clause encdec = ZICFISSLP_SSLOAD(0b00001)
+  <-> 0b100000011100 @ 0b00000 @ 0b100 @ 0b00001 @ 0b1110011
+mapping clause encdec = ZICFISSLP_SSLOAD(0b00101)
+  <-> 0b100000011100 @ 0b00000 @ 0b100 @ 0b00101 @ 0b1110011
+mapping clause encdec = ZICFISSLP_SSPOPCHK(0b00001)
+  <-> 0b100000011100 @ 0b00001 @ 0b100 @ 0b00000 @ 0b1110011
+mapping clause encdec = ZICFISSLP_SSPOPCHK(0b00101)
+  <-> 0b100000011100 @ 0b00101 @ 0b100 @ 0b00000 @ 0b1110011
+mapping clause encdec = ZICFISSLP_SSPINC(nzuimm)
+      if nzuimm != 0b00000
+  <-> 0b100000011101 @ nzuimm : bits(5) @ 0b100 @ 0b00000 @ 0b1110011
+      if nzuimm != 0b00000
+mapping clause encdec = ZICFISSLP_SSPUSH(0b00001)
+  <-> 0b1000001 @ 0b00001 @ 0b00000 @ 0b100 @ 0b00000 @ 0b1110011
+mapping clause encdec = ZICFISSLP_SSPUSH(0b00101)
+  <-> 0b1000001 @ 0b00101 @ 0b00000 @ 0b100 @ 0b00000 @ 0b1110011
+
+mapping clause assembly = ZICFISSLP_SSLOAD(rd)
+  <-> "ssload" ^ spc() ^ reg_name(rd)
+mapping clause assembly = ZICFISSLP_SSPOPCHK(rs1)
+  <-> "sspopchk" ^ spc() ^ reg_name(rs1)
+mapping clause assembly = ZICFISSLP_SSPINC(nzuimm)
+      if nzuimm != 0b00000
+  <-> "sspinc" ^ spc() ^ hex_bits_5(nzuimm)
+      if nzuimm != 0b00000
+mapping clause assembly = ZICFISSLP_SSPUSH(rs2)
+  <-> "sspush" ^ spc() ^ reg_name(rs2)
+
+function check_ssp_misaligned(vaddr : xlenbits) -> bool =
+  ((sizeof(xlen) == 32) & (vaddr[0] == bitone | vaddr[1] == bitone)) |
+  ((sizeof(xlen) == 64) & (vaddr[0] == bitone | vaddr[1] == bitone | vaddr[2] == bitone))
+
+function ss_load(vaddr : xlenbits) -> MemoryOpResult(xlenbits) =
+  /* Some extensions perform additional checks on address validity. */
+  if check_ssp_misaligned(vaddr)
+  then MemException(E_Load_Access_Fault())
+  else 
+    match translateAddr(vaddr, Read(Data)) {
+      TR_Failure(e, _) => MemException(e),
+      TR_Address(paddr, _) => {
+        let mval : MemoryOpResult(xlenbits) = match sizeof(xlen) {
+          32 => mem_read(SSRead(Data), paddr, 4, false, false, false),
+          64 => mem_read(SSRead(Data), paddr, 8, false, false, false),
+          _  => internal_error(__FILE__, __LINE__, "Unexpected xlen")
+        };
+        mval
+      }
+    }
+
+function clause execute (ZICFISSLP_SSLOAD(rd)) = {
+  if not(is_backward_cfi_active())
+  then { X(rd) = X(0); RETIRE_SUCCESS }
+  else {
+    let addr : xlenbits = ssp;
+    let mval : MemoryOpResult(xlenbits) = ss_load(addr);
+    match (mval) {
+      MemException(e)  => { handle_mem_exception(addr, e); RETIRE_FAIL },
+      MemValue(loaded) => { X(rd) = loaded; RETIRE_SUCCESS }
+    }
+  }
+}
+
+function clause execute (ZICFISSLP_SSPOPCHK(rs1)) = {
+  if not(is_backward_cfi_active()) then RETIRE_SUCCESS
+  else {
+    let addr : xlenbits = ssp;
+    let mval : MemoryOpResult(xlenbits) = ss_load(addr);
+    match (mval) {
+      MemException(e)  => { handle_mem_exception(addr, e); RETIRE_FAIL },
+      MemValue(loaded) => { 
+        if X(rs1) != loaded 
+        then { handle_illegal(); RETIRE_FAIL }
+        else {
+          ssp = match sizeof(xlen) {
+            32 => ssp - 4,
+            64 => ssp - 8,
+            _  => internal_error(__FILE__, __LINE__, "Unexpected xlen")
+          };
+          RETIRE_SUCCESS
+        }
+      }
+    }
+  }
+}
+function clause execute (ZICFISSLP_SSPINC(nzuimm)) = {
+
+  if is_backward_cfi_active() then {
+    ssp = match sizeof(xlen) {
+        32 => ssp + EXTZ(nzuimm @ 0b00),
+        64 => ssp + EXTZ(nzuimm @ 0b000),
+        _  => internal_error(__FILE__, __LINE__, "Unexpected xlen")
+      };
+    RETIRE_SUCCESS
+  } else
+    RETIRE_SUCCESS
+}
+function clause execute (ZICFISSLP_SSPUSH(rs2)) = {
+
+  if not(is_backward_cfi_active()) then RETIRE_SUCCESS
+  else {
+    let sta : xlenbits = match sizeof(xlen) {
+        32 => ssp - 4,
+        64 => ssp - 8,
+        _  => internal_error(__FILE__, __LINE__, "Unexpected xlen")
+      };
+    ssp = sta;
+    RETIRE_SUCCESS
+  }
+}
