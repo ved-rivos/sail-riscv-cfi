@@ -93,6 +93,13 @@ function is_CSR_defined (csr : csreg, p : Privilege) -> bool =
     0x306 => p == Machine & haveUsrMode(), // mcounteren
     0x310 => p == Machine & (sizeof(xlen) == 32), // mstatush
     0x320 => p == Machine, // mcountinhibit
+
+    /* machine mode: machine configuration */
+    0x30A => p == Machine,                        // menvcfg
+    0x31A => p == Machine & (sizeof(xlen) == 32), // menvcfgh
+    0x747 => p == Machine,                        // mseccfg
+    0x757 => p == Machine & (sizeof(xlen) == 32), // mseccfgh
+
     /* machine mode: trap handling */
     0x340 => p == Machine, // mscratch
     0x341 => p == Machine, // mepc

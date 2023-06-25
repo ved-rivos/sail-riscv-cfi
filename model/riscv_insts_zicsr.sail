@@ -101,6 +101,11 @@ function readCSR csr : csreg -> xlenbits = {
     (0x310, 32) => mstatush.bits(),
     (0x320,  _) => EXTZ(mcountinhibit.bits()),
 
+    (0x30A,  _) => menvcfg.bits()[(sizeof(xlen) - 1) .. 0], // menvcfg
+    (0x31A, 32) => menvcfg.bits()[63 .. 32],                // menvcfgh
+    (0x747,  _) => mseccfg.bits()[(sizeof(xlen) - 1) .. 0], // mseccfg
+    (0x757, 32) => mseccfg.bits()[63 .. 32],                // mseccfgh
+
     (0x340,  _) => mscratch,
     (0x341,  _) => get_xret_target(Machine) & pc_alignment_mask(),
     (0x342,  _) => mcause.bits(),
@@ -188,6 +193,12 @@ function writeCSR (csr : csreg, value : xlenbits) -> unit = {
     (0x306,  _) => { mcounteren = legalize_mcounteren(mcounteren, value); Some(EXTZ(mcounteren.bits())) },
     (0x310, 32) => { Some(mstatush.bits()) }, // ignore writes for now
     (0x320,  _) => { mcountinhibit = legalize_mcountinhibit(mcountinhibit, value); Some(EXTZ(mcountinhibit.bits())) },
+
+    (0x30A,  _) => { menvcfg = legalize_menvcfg(menvcfg, value); Some(menvcfg.bits()[sizeof(xlen) - 1 .. 0]) },
+    (0x31A, 32) => { menvcfg = legalize_menvcfg_high(menvcfg, value); Some(menvcfg.bits()[63 .. 32]) },
+    (0x747,  _) => { mseccfg = legalize_mseccfg(mseccfg, value); Some(mseccfg.bits()[sizeof(xlen) - 1 .. 0]) },
+    (0x757, 32) => { mseccfg = legalize_mseccfg_high(mseccfg, value); Some(mseccfg.bits()[63 .. 32]) },
+
     (0x340,  _) => { mscratch = value; Some(mscratch) },
     (0x341,  _) => { Some(set_xret_target(Machine, value)) },
     (0x342,  _) => { mcause->bits() = value; Some(mcause.bits()) },
