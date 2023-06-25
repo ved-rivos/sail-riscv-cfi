@@ -94,6 +94,8 @@ function update_elp(rs1_reg : regidx, rd_reg : regidx) -> unit = {
 }
 
 function is_lp_expected() -> bool = {
+  if   get_config_print_platform()
+    then print_platform("ELP " ^ to_str(elp));
   is_forward_cfi_active() & (elp == LP_EXPECTED)
 }
 

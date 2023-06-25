@@ -485,3 +485,11 @@ function report_invalid_width(f , l, w, k) -> 'a = {
     ^ string_of_int(sizeof(xlen)));
   throw Error_internal_error()
 }
+
+val elp_to_str : bits(1) -> string
+function elp_to_str (e) =
+  match (e) {
+    LP_EXPECTED    => "LP_EXPECTED",
+    NO_LP_EXPECTED => "NO_LP_EXPECTED"
+  }
+overload to_str = {elp_to_str}

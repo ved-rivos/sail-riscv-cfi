@@ -214,7 +214,7 @@ function haveZmmul()  -> bool = true
 function haveZicond() -> bool = true
 
 /* Zicfisslp extension support */
-function haveZicfisslp() -> bool = true
+function haveZicfisslp() -> bool = false
 
 bitfield Mstatush : bits(32) = {
   MBE  : 5,
