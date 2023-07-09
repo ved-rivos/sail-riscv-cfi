@@ -213,12 +213,15 @@ function haveZmmul()  -> bool = true
 /* Zicond extension support */
 function haveZicond() -> bool = true
 
-/* Zicfisslp extension support */
-function haveZicfisslp() -> bool = true
+/* Zicfiss extension support */
+function haveZicfiss() -> bool = true
+
+/* Zicfilp extension support */
+function haveZicfilp() -> bool = true
 
 /* Machine configuration */
 bitfield MEnvCfg : bits(64) = {
-  CFIE   : 60,
+  SBCFIE : 60,
   SFCFIE : 59
 }
 
@@ -244,10 +247,12 @@ bitfield Mstatus : xlenbits = {
   // SXL  : 35 .. 34,
   // UXL  : 33 .. 32,
 
-  // Zicfisslp bits - hardwired to zero if extension does not exist
+  // Zicfilp bits - hardwired to zero if extension does not exist
   MPELP  : 26,
   SPELP  : 25,
+  // Zicfiss bit - hardwired to zero if extension does not exist
   UBCFIE : 24,
+  // Zicfilp bits - hardwired to zero if extension does not exist
   UFCFIE : 23,
 
   TSR  : 22,
@@ -314,8 +319,12 @@ function legalize_mstatus(o : Mstatus, v : xlenbits) -> Mstatus = {
    * that does not have a matching bitfield entry. All bits above 32 are handled
    * explicitly later.
    */
-  let m : Mstatus = if haveZicfisslp()
+  let m : Mstatus = if haveZicfilp() & haveZicfiss()
     then Mk_Mstatus(EXTZ(v[26 .. 11] @ 0b00 @ v[8 .. 7] @ 0b0 @ v[5 .. 3] @ 0b0 @ v[1 .. 0]))
+    else if haveZicfilp()
+    then Mk_Mstatus(EXTZ(v[26 .. 25] @ 0b0 @ v[23 .. 11] @ 0b00 @ v[8 .. 7] @ 0b0 @ v[5 .. 3] @ 0b0 @ v[1 .. 0]))
+    else if haveZicfiss()
+    then Mk_Mstatus(EXTZ(v[24 .. 24] @ 0b0 @ v[22 .. 11] @ 0b00 @ v[8 .. 7] @ 0b0 @ v[5 .. 3] @ 0b0 @ v[1 .. 0]))
     else Mk_Mstatus(EXTZ(v[22 .. 11] @ 0b00 @ v[8 .. 7] @ 0b0 @ v[5 .. 3] @ 0b0 @ v[1 .. 0]));
 
   /* We don't have any extension context yet. */
@@ -346,12 +355,17 @@ function legalize_mstatus(o : Mstatus, v : xlenbits) -> Mstatus = {
              m
           } else m;
 
-  /* Hardwired to zero in absence of Zicfisslp */
-  let m = if not(haveZicfisslp()) then {
+  /* Hardwired to zero in absence of Zicfilp */
+  let m = if not(haveZicfilp()) then {
              let m = update_UFCFIE(m, 0b0);
-             let m = update_UBCFIE(m, 0b0);
              let m = update_SPELP(m,  0b0);
              let m = update_MPELP(m,  0b0);
+             m
+          } else m;
+
+  /* Hardwired to zero in absence of Zicfiss */
+  let m = if not(haveZicfiss()) then {
+             let m = update_UBCFIE(m, 0b0);
              m
           } else m;
 
@@ -647,10 +661,14 @@ function lower_mstatus(m : Mstatus) -> Sstatus = {
   let s = update_SD(s, m.SD());
   let s = set_sstatus_UXL(s, get_mstatus_UXL(m));
 
-  if haveZicfisslp() & menvcfg.CFIE() == 0b1 then {
+  if haveZicfilp() then {
     let s = update_UFCFIE(s, m.UFCFIE());
-    let s = update_UBCFIE(s, m.UBCFIE());
     let s = update_SPELP(s, m.SPELP());
+  };
+
+  if haveZicfiss() &
+     ( menvcfg.SBCFIE() == 0b1 | cur_privilege == Machine ) then {
+    let s = update_UBCFIE(s, m.UBCFIE());
   };
 
   let s = update_MXR(s, m.MXR());
@@ -667,10 +685,13 @@ function lower_mstatus(m : Mstatus) -> Sstatus = {
 
 function lift_sstatus(m : Mstatus, s : Sstatus) -> Mstatus = {
 
-  if haveZicfisslp() & menvcfg.CFIE() == 0b1 then {
+  if haveZicfilp() then {
     let m = update_UFCFIE(m, s.UFCFIE());
-    let m = update_UBCFIE(m, s.UBCFIE());
     let m = update_SPELP(m, s.SPELP());
+  };
+  if haveZicfiss() &
+     ( menvcfg.SBCFIE() == 0b1 | cur_privilege == Machine ) then {
+    let m = update_UBCFIE(m, s.UBCFIE());
   };
   let m = update_MXR(m, s.MXR());
   let m = update_SUM(m, s.SUM());
@@ -879,10 +900,14 @@ function write_seed_csr () -> option(xlenbits) = None()
 function legalize_menvcfg_high(c : MEnvCfg, value : bits(32)) -> MEnvCfg = {
   let m = Mk_MEnvCfg(value @ to_bits(32, 0));
 
-  /* Hardwired to zero in the absence of zicfisslp */
-  let m = if not(haveZicfisslp()) then {
-             let m = update_CFIE(m, 0b0);
+  /* Hardwired to zero in the absence of zicfilp */
+  let m = if not(haveZicfilp()) then {
              let m = update_SFCFIE(m, 0b0);
+             m
+          } else m;
+  /* Hardwired to zero in the absence of zicfiss */
+  let m = if not(haveZicfiss()) then {
+             let m = update_SBCFIE(m, 0b0);
              m
           } else m;
   m
@@ -908,9 +933,13 @@ function legalize_mseccfg_high(c : MSecCfg, value : xlenbits) -> MSecCfg = {
 
 function legalize_mseccfg(c : MSecCfg, value : xlenbits) -> MSecCfg = {
   let m = Mk_MSecCfg(EXTZ(value));
-  /* Hardwired to zero in the absence of zicfisslp */
-  let m = if not(haveZicfisslp()) then {
+  /* Hardwired to zero in the absence of Zicfilp */
+  let m = if not(haveZicfilp()) then {
              let m = update_MFCFIE(m, 0b0);
+             m
+          } else m;
+  /* Hardwired to zero in the absence of Zicfiss */
+  let m = if not(haveZicfiss()) then {
              let m = update_SSPMP(m, 0b000000);
              m
           } else m;
