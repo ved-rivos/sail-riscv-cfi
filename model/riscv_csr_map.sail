@@ -90,6 +90,8 @@ mapping clause csr_name_map = 0x002  <-> "frm"
 mapping clause csr_name_map = 0x003  <-> "fcsr"
 /* user entropy source */
 mapping clause csr_name_map = 0x015  <-> "seed"
+/* shadow stack pointer */
+mapping clause csr_name_map = 0x050  <-> "ssp"
 /* counter/timers */
 mapping clause csr_name_map = 0xC00  <-> "cycle"
 mapping clause csr_name_map = 0xC01  <-> "time"
