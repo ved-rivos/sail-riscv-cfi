@@ -194,6 +194,11 @@ union AccessType ('a : Type) = {
   Write     : 'a,
   ReadWrite : ('a, 'a),
   Execute   : unit
+
+  /* Zicfiss: Access types for shadow stack */
+  SSRead      : 'a,
+  SSWrite     : 'a,
+  SSReadWrite : ('a, 'a)
 }
 
 enum word_width = {BYTE, HALF, WORD, DOUBLE}
