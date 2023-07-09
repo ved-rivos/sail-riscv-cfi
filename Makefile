@@ -97,6 +97,10 @@ endif
 SAIL_OTHER_SRCS += riscv_zicfilp_regs.sail     # Zicfilp state
 SAIL_OTHER_SRCS += riscv_insts_zicfilp.sail    # Zicfilp instructions
 
+SAIL_OTHER_SRCS += riscv_zicfiss_regs.sail     # Zicfilp state
+SAIL_OTHER_SRCS += riscv_zicfiss_control.sail  # Zicfilp CSRs
+SAIL_OTHER_SRCS += riscv_insts_zicfiss.sail    # Zicfiss instructions
+
 PRELUDE_SRCS   = $(addprefix model/,$(PRELUDE))
 SAIL_SRCS      = $(addprefix model/,$(SAIL_ARCH_SRCS) $(SAIL_SEQ_INST_SRCS)  $(SAIL_OTHER_SRCS))
 SAIL_RMEM_SRCS = $(addprefix model/,$(SAIL_ARCH_SRCS) $(SAIL_RMEM_INST_SRCS) $(SAIL_OTHER_SRCS))
