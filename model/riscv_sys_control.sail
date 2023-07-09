@@ -417,9 +417,8 @@ function trap_handler(del_priv : Privilege, intr : bool, c : exc_code, pc : xlen
        mtval           = tval(info);
        mepc            = pc;
 
-       cur_privilege   = del_priv;
-
        handle_trap_extension(del_priv, pc, ext);
+       cur_privilege   = del_priv;
 
        if   get_config_print_reg()
        then print_reg("CSR mstatus <- " ^ BitStr(mstatus.bits()));
@@ -442,9 +441,8 @@ function trap_handler(del_priv : Privilege, intr : bool, c : exc_code, pc : xlen
        stval           = tval(info);
        sepc            = pc;
 
-       cur_privilege   = del_priv;
-
        handle_trap_extension(del_priv, pc, ext);
+       cur_privilege   = del_priv;
 
        if   get_config_print_reg()
        then print_reg("CSR mstatus <- " ^ BitStr(mstatus.bits()));
@@ -473,7 +471,9 @@ function trap_handler(del_priv : Privilege, intr : bool, c : exc_code, pc : xlen
     }
   };
 }
-
+/* Zicfilp : extension to restore elp */
+val zicfilp_set_elp_to_mpelp : (unit) -> unit
+val zicfilp_set_elp_to_spelp : (unit) -> unit
 function exception_handler(cur_priv : Privilege, ctl : ctl_result,
                            pc: xlenbits) -> xlenbits = {
   match (cur_priv, ctl) {
@@ -493,6 +493,9 @@ function exception_handler(cur_priv : Privilege, ctl : ctl_result,
       if   cur_privilege != Machine
       then mstatus->MPRV() = 0b0;
 
+      /* Zicfilp: extension to restore ELP */
+      zicfilp_set_elp_to_mpelp();
+
       if   get_config_print_reg()
       then print_reg("CSR mstatus <- " ^ BitStr(mstatus.bits()));
       if   get_config_print_platform()
@@ -509,6 +512,9 @@ function exception_handler(cur_priv : Privilege, ctl : ctl_result,
       mstatus->SPP()  = 0b0;
       if   cur_privilege != Machine
       then mstatus->MPRV() = 0b0;
+
+      /* Zicfilp: extension to restore ELP */
+      zicfilp_set_elp_to_spelp();
 
       if   get_config_print_reg()
       then print_reg("CSR mstatus <- " ^ BitStr(mstatus.bits()));
