@@ -42,7 +42,6 @@ SAIL_DEFAULT_INST += riscv_insts_zbkx.sail
 SAIL_DEFAULT_INST += riscv_insts_zicond.sail
 
 
-
 SAIL_SEQ_INST  = $(SAIL_DEFAULT_INST) riscv_jalr_seq.sail
 SAIL_RMEM_INST = $(SAIL_DEFAULT_INST) riscv_jalr_rmem.sail riscv_insts_rmem.sail
 
@@ -58,7 +57,6 @@ SAIL_SYS_SRCS += riscv_next_control.sail    # helpers for the 'N' extension
 SAIL_SYS_SRCS += riscv_softfloat_interface.sail riscv_fdext_regs.sail riscv_fdext_control.sail
 SAIL_SYS_SRCS += riscv_csr_ext.sail         # access to CSR extensions
 SAIL_SYS_SRCS += riscv_sys_control.sail     # general exception handling
-SAIL_SYS_SRCS += riscv_zicfisslp_regs.sail  # Zicfisslp state
 
 SAIL_RV32_VM_SRCS = riscv_vmem_sv32.sail riscv_vmem_rv32.sail
 SAIL_RV64_VM_SRCS = riscv_vmem_sv39.sail riscv_vmem_sv48.sail riscv_vmem_rv64.sail
@@ -96,6 +94,8 @@ SAIL_OTHER_SRCS     = $(SAIL_STEP_SRCS) riscv_analysis.sail
 SAIL_OTHER_COQ_SRCS = riscv_termination_common.sail riscv_termination_rv64.sail riscv_analysis.sail
 endif
 
+SAIL_OTHER_SRCS += riscv_zicfilp_regs.sail     # Zicfilp state
+SAIL_OTHER_SRCS += riscv_insts_zicfilp.sail    # Zicfilp instructions
 
 PRELUDE_SRCS   = $(addprefix model/,$(PRELUDE))
 SAIL_SRCS      = $(addprefix model/,$(SAIL_ARCH_SRCS) $(SAIL_SEQ_INST_SRCS)  $(SAIL_OTHER_SRCS))
