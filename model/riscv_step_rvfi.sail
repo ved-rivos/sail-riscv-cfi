@@ -69,8 +69,11 @@
 /*=======================================================================================*/
 
 /* Step hooks for rvfi. */
+val zicfilp_check_if_lpad : (FetchResult) -> FetchResult
 
-function ext_fetch_hook(f : FetchResult) -> FetchResult = f
+function ext_fetch_hook(f : FetchResult) -> FetchResult = {
+  zicfilp_check_if_lpad(f)
+}
 
 function ext_pre_step_hook()  -> unit = ()
 
