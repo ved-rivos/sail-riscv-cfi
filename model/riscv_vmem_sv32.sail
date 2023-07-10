@@ -117,6 +117,11 @@ function walk32(vaddr, ac, priv, mxr, do_sum, ptb, level, global, ext_ptw) = {
           }
         } else { /* leaf PTE */
           match checkPTEPermission(ac, priv, mxr, do_sum, pattr, ext_pte, ext_ptw) {
+            /* zicfiss: non SS write to SS pte and SS read/write to non SS pte not allowed */
+            PTE_SS_Check_Failure(ext_ptw, ext_ptw_fail) => {
+/*            print("walk32: pte SS access check failure"); */
+              PTW_Failure(PTW_Access(), ext_ptw)
+            },
             PTE_Check_Failure(ext_ptw, ext_ptw_fail) => {
 /*            print("walk32: pte permission check failure"); */
               PTW_Failure(ext_get_ptw_error(ext_ptw_fail), ext_ptw)
@@ -194,6 +199,7 @@ function translate32(asid, ptb, vAddr, ac, priv, mxr, do_sum, level, ext_ptw) = 
       let  ext_pte : extPte = zeros(); // no reserved bits for extensions
       let  pteBits = Mk_PTE_Bits(pte.BITS());
       match checkPTEPermission(ac, priv, mxr, do_sum, pteBits, ext_pte, ext_ptw) {
+        PTE_SS_Check_Failure(ext_ptw, ext_ptw_fail) => { TR_Failure(PTW_Access(), ext_ptw) },
         PTE_Check_Failure(ext_ptw, ext_ptw_fail) => { TR_Failure(ext_get_ptw_error(ext_ptw_fail), ext_ptw) },
         PTE_Check_Success(ext_ptw) => {
           match update_PTE_Bits(pteBits, ac, ext_pte) {

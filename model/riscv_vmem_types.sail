@@ -82,11 +82,11 @@ function accessType_to_str (a) =
     Read(_)            => "R",
     Write(_)           => "W",
     ReadWrite(_, _)    => "RW",
-    Execute()          => "X"
+    Execute()          => "X",
     /* zicfiss: shadow stack read and writes */
     SSRead(_)          => "SS_R",
     SSWrite(_)         => "SS_W",
-    SSReadWrite(_, _)  => "SS_RW",
+    SSReadWrite(_, _)  => "SS_RW"
   }
 
 overload to_str = {accessType_to_str}

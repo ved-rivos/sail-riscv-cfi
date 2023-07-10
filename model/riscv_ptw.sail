@@ -113,14 +113,14 @@ function translationException(a : AccessType(ext_access_type), f : PTW_Error) ->
     (Write(_), PTW_Access())     => E_SAMO_Access_Fault(),
     (Write(_), _)                => E_SAMO_Page_Fault(),
     (Execute(), PTW_Access())    => E_Fetch_Access_Fault(),
-    (Execute(), _)               => E_Fetch_Page_Fault()
+    (Execute(), _)               => E_Fetch_Page_Fault(),
     /* Zicfiss: shadow stack load/store/amo exceptions */
     (SSReadWrite(_), PTW_Access()) => E_SAMO_Access_Fault(),
     (SSReadWrite(_), _)            => E_SAMO_Page_Fault(),
     (SSRead(_), PTW_Access())      => E_Load_Access_Fault(),
     (SSRead(_), _)                 => E_Load_Page_Fault(),
     (SSWrite(_), PTW_Access())     => E_SAMO_Access_Fault(),
-    (SSWrite(_), _)                => E_SAMO_Page_Fault(),
+    (SSWrite(_), _)                => E_SAMO_Page_Fault()
   } in {
 /*  print_mem("translationException(" ^ a ^ ", " ^ f ^ ") -> " ^ e); */
     e

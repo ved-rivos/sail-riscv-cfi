@@ -104,36 +104,67 @@ function isPTEPtr(p : pteAttribs, ext : extPte) -> bool = {
   a.R() == 0b0 & a.W() == 0b0 & a.X() == 0b0
 }
 
+/* zicfiss: pte.xwr=010 is a shadow stack page */
+function is_ss_pte(p : PTE_Bits) -> bool =
+  (p.R() == 0b0 & p.W() == 0b1 & p.X() == 0b0 & menvcfg.SBCFIE() == 0b1)
+
 function isInvalidPTE(p : pteAttribs, ext : extPte) -> bool = {
   let a = Mk_PTE_Bits(p);
-  a.V() == 0b0 | (a.W() == 0b1 & a.R() == 0b0)
+  a.V() == 0b0 | ((a.W() == 0b1 & a.R() == 0b0) & not(is_ss_pte(a)))
 }
 
 union PTE_Check = {
   PTE_Check_Success : ext_ptw,
-  PTE_Check_Failure : (ext_ptw, ext_ptw_fail)
+  PTE_Check_Failure : (ext_ptw, ext_ptw_fail),
+  /* zicfiss: non SS write to SS pte and SS read/write to non SS pte not allowed */
+  PTE_SS_Check_Failure : (ext_ptw, ext_ptw_fail)
 }
 
 function to_pte_check(b : bool) -> PTE_Check =
   if b then PTE_Check_Success(()) else PTE_Check_Failure((), ())
 
+/* zicfiss: non SS write to SS pte and SS read/write to non SS pte not allowed */
+function isSSPTEviolation(ac : AccessType(ext_access_type), p : PTE_Bits) -> bool = {
+  match (haveZicfiss(), ac) {
+    (false, _            ) => false,
+    (_, Read(_)          ) => false,
+    (_, Write(_)         ) => is_ss_pte(p),
+    (_, ReadWrite(_, _)  ) => is_ss_pte(p),
+    (_, Execute()        ) => false,
+    (_, SSRead(_)        ) => not(is_ss_pte(p)),
+    (_, SSWrite(_)       ) => not(is_ss_pte(p)),
+    (_, SSReadWrite(_, _)) => not(is_ss_pte(p))
+  }
+}
 /* For extensions: this function gets the extension-available bits of the PTE in extPte,
  * and the accumulated information of the page-table-walk in ext_ptw.  It should return
  * the updated ext_ptw in both the success and failure cases.
  */
 function checkPTEPermission(ac : AccessType(ext_access_type), priv : Privilege, mxr : bool, do_sum : bool, p : PTE_Bits, ext : extPte, ext_ptw : ext_ptw) -> PTE_Check = {
-  match (ac, priv) {
-    (Read(_),         User)       => to_pte_check(p.U() == 0b1 & (p.R() == 0b1 | (p.X() == 0b1 & mxr))),
-    (Write(_),        User)       => to_pte_check(p.U() == 0b1 & p.W() == 0b1),
-    (ReadWrite(_, _), User)       => to_pte_check(p.U() == 0b1 & p.W() == 0b1 & (p.R() == 0b1 | (p.X() == 0b1 & mxr))),
-    (Execute(),       User)       => to_pte_check(p.U() == 0b1 & p.X() == 0b1),
+  /* zicfiss: non SS write to SS pte and SS read/write to non SS pte not allowed */
+  let is_sspte_violation : bool = isSSPTEviolation(ac, p);
+  match (is_sspte_violation, ac, priv) {
+    (true, _,                _)          => PTE_SS_Check_Failure((), ()),
 
-    (Read(_),         Supervisor) => to_pte_check((p.U() == 0b0 | do_sum) & (p.R() == 0b1 | (p.X() == 0b1 & mxr))),
-    (Write(_),        Supervisor) => to_pte_check((p.U() == 0b0 | do_sum) & p.W() == 0b1),
-    (ReadWrite(_, _), Supervisor) => to_pte_check((p.U() == 0b0 | do_sum) & p.W() == 0b1 & (p.R() == 0b1 | (p.X() == 0b1 & mxr))),
-    (Execute(),       Supervisor) => to_pte_check(p.U() == 0b0 & p.X() == 0b1),
+    (_,    SSRead(_),        User)       => to_pte_check(p.U() == 0b1),
+    (_,    SSWrite(_),       User)       => to_pte_check(p.U() == 0b1),
+    (_,    SSReadWrite(_,_), User)       => to_pte_check(p.U() == 0b1),
 
-    (_,               Machine)    => internal_error(__FILE__, __LINE__, "m-mode mem perm check")
+    (_,    SSRead(_),        Supervisor) => to_pte_check((p.U() == 0b0 | do_sum)),
+    (_,    SSWrite(_),       Supervisor) => to_pte_check((p.U() == 0b0 | do_sum)),
+    (_,    SSReadWrite(_,_), Supervisor) => to_pte_check((p.U() == 0b0 | do_sum)),
+
+    (_,    Read(_),          User)       => to_pte_check(p.U() == 0b1 & (p.R() == 0b1 | (p.X() == 0b1 & mxr) | is_ss_pte(p))),
+    (_,    Write(_),         User)       => to_pte_check(p.U() == 0b1 & p.W() == 0b1),
+    (_,    ReadWrite(_, _),  User)       => to_pte_check(p.U() == 0b1 & p.W() == 0b1 & (p.R() == 0b1 | (p.X() == 0b1 & mxr) | is_ss_pte(p))),
+    (_,    Execute(),        User)       => to_pte_check(p.U() == 0b1 & p.X() == 0b1),
+
+    (_,    Read(_),          Supervisor) => to_pte_check((p.U() == 0b0 | do_sum) & (p.R() == 0b1 | (p.X() == 0b1 & mxr) | is_ss_pte(p))),
+    (_,    Write(_),         Supervisor) => to_pte_check((p.U() == 0b0 | do_sum) & p.W() == 0b1),
+    (_,    ReadWrite(_, _),  Supervisor) => to_pte_check((p.U() == 0b0 | do_sum) & p.W() == 0b1 & (p.R() == 0b1 | (p.X() == 0b1 & mxr) | is_ss_pte(p))),
+    (_,    Execute(),        Supervisor) => to_pte_check(p.U() == 0b0 & p.X() == 0b1),
+
+    (_,    _,                Machine)    => internal_error(__FILE__, __LINE__, "m-mode mem perm check")
   }
 }
 
@@ -142,7 +173,10 @@ function update_PTE_Bits(p : PTE_Bits, a : AccessType(ext_access_type), ext : ex
                                   Execute() => false,
                                   Read() => false,
                                   Write(_) => true,
-                                  ReadWrite(_,_) => true
+                                  ReadWrite(_,_) => true,
+                                  SSRead() => false,
+                                  SSWrite(_) => true,
+                                  SSReadWrite(_,_) => true
                                 });
 
   let update_a = p.A() == 0b0;                                                   // accessed-bit
