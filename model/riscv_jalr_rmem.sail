@@ -68,6 +68,9 @@
 /*  SUCH DAMAGE.                                                                         */
 /*=======================================================================================*/
 
+/* Zicfilp : Update ELP state */
+val zicfilp_update_elp : (regidx, regidx) -> unit
+
 /* The definition for the memory model. */
 
 function clause execute (RISCV_JALR(imm, rs1, rd)) = {
