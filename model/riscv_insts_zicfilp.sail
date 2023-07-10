@@ -82,6 +82,7 @@ function is_forward_cfi_active() -> bool = {
   then menvcfg.SFCFIE() == 0b1
   else mstatus.UFCFIE() == 0b1
 }
+/* extension to jalr */
 function zicfilp_update_elp(rs1_reg : regidx, rd_reg : regidx) -> unit = {
   /* 
    * c.jr expands to jalr x0, 0(rs1) and c.jalr expands to jalr x1, 0(rs1)
@@ -91,42 +92,6 @@ function zicfilp_update_elp(rs1_reg : regidx, rd_reg : regidx) -> unit = {
   let is_indirect_call_jump : bool = (((rs1_reg != 0b00001) & (rs1_reg != 0b00101)));
   if is_indirect_call_jump == true & is_sw_guarded_jump == false & is_forward_cfi_active()
   then elp = ElpState_to_bits(LP_EXPECTED);
-}
-function zicfilp_check_if_lpad(f : FetchResult) -> FetchResult = {
-   if   not(is_forward_cfi_active())
-   then f
-   else {
-     /* landing pad is a AUIPC with rd=x0 */
-     match f {
-       F_Base(f) => {
-         let inst    : word    = EXTZ(f);
-         let lpad_op : bits(7) = inst[6 .. 0];
-         let rd_reg  : regidx  = inst[11.. 7];
-         if   not(is_forward_cfi_active())
-         then F_Base(f)
-         else if elp != ElpState_to_bits(LP_EXPECTED)
-         then F_Base(f)
-         else if PC[1 .. 0] != 0b00
-         then F_Error(E_Illegal_Instr(), EXTZ(0b0))
-         else if ((lpad_op != 0b0010111) | (rd_reg != 0b00000))
-         then F_Error(E_Illegal_Instr(), EXTZ(0b0))
-         else F_Base(f)
-       },
-       F_RVC(f) => {
-         if   not(is_forward_cfi_active())
-         then F_RVC(f)
-         else if (elp == ElpState_to_bits(LP_EXPECTED))
-         then F_Error(E_Illegal_Instr(), EXTZ(0b0))
-         else F_RVC(f)
-       },
-       F_Ext_Error(e)   => {
-         f
-       },
-       F_Error(e, addr) => {
-         f
-       }
-     }
-   }
 }
 /* AUIPC with rd=x0 is a lpad instruction when zicfilp is active else a no-op */
 function zicfilp_lpad( lpl : bits(20) ) -> Retired = {
@@ -139,6 +104,7 @@ function zicfilp_lpad( lpl : bits(20) ) -> Retired = {
    then { handle_illegal(); RETIRE_FAIL }
    else {elp = ElpState_to_bits(NO_LP_EXPECTED); RETIRE_SUCCESS };
 }
+/* trap delivery extension */
 function zicfilp_trap_extension(del_priv : Privilege) -> unit = {
   let elp_val : elp_state = if is_forward_cfi_active() then elp else ElpState_to_bits(NO_LP_EXPECTED);
 
@@ -152,6 +118,7 @@ function zicfilp_trap_extension(del_priv : Privilege) -> unit = {
     elp = ElpState_to_bits(NO_LP_EXPECTED);
   }
 }
+/* extension to MRET */
 function zicfilp_set_elp_to_mpelp() -> unit = {
   match is_forward_cfi_active() {
     true  => { elp = mstatus.MPELP() },
@@ -162,6 +129,7 @@ function zicfilp_set_elp_to_mpelp() -> unit = {
     mstatus = update_MPELP(mstatus, ElpState_to_bits(NO_LP_EXPECTED));
   }
 }
+/* extension to SRET */
 function zicfilp_set_elp_to_spelp() -> unit = {
   match is_forward_cfi_active() {
     true  => { elp = mstatus.SPELP() },
