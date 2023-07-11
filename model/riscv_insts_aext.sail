@@ -332,14 +332,14 @@ function clause execute (AMO(op, aq, rl, rs2, rs1, width, rd)) = {
              */
             let rd_plus_one  : regidx = 
               match (width, sizeof(xlen), op) {
-                (DOUBLE, 32, AMOCAS) => if (rd != zreg) then (rd + 1) else zeros(),
-                (QUAD,   64, AMOCAS) => if (rd != zreg) then (rd + 1) else zeros(),
+                (DOUBLE, 32, AMOCAS) => if (rd != zreg) then (rd + 1) else zreg,
+                (QUAD,   64, AMOCAS) => if (rd != zreg) then (rd + 1) else zreg,
                 _ => zeros()
               };
             let rs2_plus_one : regidx = 
               match (width, sizeof(xlen), op) {
-                (DOUBLE, 32, AMOCAS) => if (rs2 != zreg) then (rs2 + 1) else zeros(),
-                (QUAD,   64, AMOCAS) => if (rs2 != zreg) then (rs2 + 1) else zeros(),
+                (DOUBLE, 32, AMOCAS) => if (rs2 != zreg) then (rs2 + 1) else zreg,
+                (QUAD,   64, AMOCAS) => if (rs2 != zreg) then (rs2 + 1) else zreg,
                 _ => zeros()
               };
             let rd_plus_one_val  : xlenbits = EXTZ(X(rd_plus_one));
