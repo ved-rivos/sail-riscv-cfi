@@ -141,7 +141,7 @@ function check_ssp_misaligned(vaddr : xlenbits, width : word_width) -> bool = {
 function ss_load(vaddr : xlenbits, width : word_width) -> MemoryOpResult(xlenbits) = {
   if check_ssp_misaligned(vaddr, width)
   then MemException(E_Load_Access_Fault())
-  else match translateAddr(vaddr, Read(Data)) {
+  else match translateAddr(vaddr, SSRead(Data)) {
     TR_Failure(e, _) => MemException(e),
     TR_Address(paddr, _) => {
       let mval : MemoryOpResult(xlenbits) = match sizeof(xlen) {
@@ -190,8 +190,8 @@ function clause execute (ZICFISSLP_SSPOPCHK(rs1)) = {
         then { handle_illegal(); RETIRE_FAIL }
         else {
           ssp = match width {
-            WORD   => ssp - 4,
-            DOUBLE => ssp - 8,
+            WORD   => ssp + 4,
+            DOUBLE => ssp + 8,
             _      => internal_error(__FILE__, __LINE__, "Unexpected xlen width")
           };
           RETIRE_SUCCESS
