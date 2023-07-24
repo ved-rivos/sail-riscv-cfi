@@ -43,8 +43,6 @@ SAIL_DEFAULT_INST += riscv_insts_zicond.sail
 
 SAIL_DEFAULT_INST += riscv_zicfilp_regs.sail     # Zicfilp state
 SAIL_DEFAULT_INST += riscv_insts_zicfilp.sail    # Zicfilp instructions
-SAIL_DEFAULT_INST += riscv_zicfiss_regs.sail     # Zicfilp state
-SAIL_DEFAULT_INST += riscv_zicfiss_control.sail  # Zicfilp CSRs
 SAIL_DEFAULT_INST += riscv_insts_zicfiss.sail    # Zicfiss instructions
 
 SAIL_SEQ_INST  = $(SAIL_DEFAULT_INST) riscv_jalr_seq.sail
@@ -60,6 +58,7 @@ SAIL_SYS_SRCS += riscv_sys_exceptions.sail  # default basic helpers for exceptio
 SAIL_SYS_SRCS += riscv_sync_exception.sail  # define the exception structure used in the model
 SAIL_SYS_SRCS += riscv_next_control.sail    # helpers for the 'N' extension
 SAIL_SYS_SRCS += riscv_softfloat_interface.sail riscv_fdext_regs.sail riscv_fdext_control.sail
+SAIL_SYS_SRCS += riscv_zicfiss_control.sail # Zicfilp CSRs
 SAIL_SYS_SRCS += riscv_csr_ext.sail         # access to CSR extensions
 SAIL_SYS_SRCS += riscv_sys_control.sail     # general exception handling
 
@@ -78,6 +77,7 @@ PRELUDE = prelude.sail prelude_mapping.sail $(SAIL_XLEN) $(SAIL_FLEN) prelude_me
 
 SAIL_REGS_SRCS = riscv_reg_type.sail riscv_freg_type.sail riscv_regs.sail riscv_pc_access.sail riscv_sys_regs.sail
 SAIL_REGS_SRCS += riscv_pmp_regs.sail riscv_pmp_control.sail
+SAIL_REGS_SRCS += riscv_zicfiss_regs.sail                     # Zicfilp state
 SAIL_REGS_SRCS += riscv_ext_regs.sail $(SAIL_CHECK_SRCS)
 
 SAIL_ARCH_SRCS = $(PRELUDE)
