@@ -350,22 +350,26 @@ function clause execute (AMO(op, aq, rl, rs2, rs1, width, rd)) = {
               };
             let rd_plus_one_val  : xlenbits = EXTZ(X(rd_plus_one));
             let rs2_plus_one_val : xlenbits = EXTZ(X(rs2_plus_one));
-
+            /* AMOCAS has release semantics only if AMOCAS is successful */
+            let amo_rd_rl : bool = match op {
+                AMOCAS => false,
+                _      => aq & rl
+            };
             match (eares) {
               MemException(e) => { handle_mem_exception(addr, e); RETIRE_FAIL },
               MemValue(_) => {
                 let mval : MemoryOpResult(xlenbits) = match (width, sizeof(xlen)) {
-                  (AMO_BYTE, _)    => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 1, aq, aq & rl, true)),
-                  (AMO_HALF, _)    => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 2, aq, aq & rl, true)),
-                  (AMO_WORD, _)    => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 4, aq, aq & rl, true)),
-                  (AMO_DOUBLE, 64) => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 8, aq, aq & rl, true)),
-                  (AMO_DOUBLE, 32) => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 4, aq, aq & rl, true)),
-                  (AMO_QUAD,   64) => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 8, aq, aq & rl, true)),
+                  (AMO_BYTE, _)    => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 1, aq, amo_rd_rl, true)),
+                  (AMO_HALF, _)    => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 2, aq, amo_rd_rl, true)),
+                  (AMO_WORD, _)    => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 4, aq, amo_rd_rl, true)),
+                  (AMO_DOUBLE, 64) => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 8, aq, amo_rd_rl, true)),
+                  (AMO_DOUBLE, 32) => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 4, aq, amo_rd_rl, true)),
+                  (AMO_QUAD,   64) => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr, 8, aq, amo_rd_rl, true)),
                   _            => internal_error(__FILE__, __LINE__, "Unexpected AMO width")
                 };
                 let mval_high : MemoryOpResult(xlenbits) = match (width, sizeof(xlen)) {
-                  (AMO_DOUBLE, 32) => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr+4, 4, aq, aq & rl, true)),
-                  (AMO_QUAD,   64) => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr+8, 8, aq, aq & rl, true)),
+                  (AMO_DOUBLE, 32) => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr+4, 4, aq, amo_rd_rl, true)),
+                  (AMO_QUAD,   64) => extend_value(is_unsigned, mem_read(ReadWrite(Data, Data), addr+8, 8, aq, amo_rd_rl, true)),
                   _                => MemValue(zeros())
                 };
                 match (mval) {
@@ -397,6 +401,10 @@ function clause execute (AMO(op, aq, rl, rs2, rs1, width, rd)) = {
                             AMOMINU => to_bits(sizeof(xlen), min(unsigned(rs2_val), unsigned(loaded))),
                             AMOMAXU => to_bits(sizeof(xlen), max(unsigned(rs2_val), unsigned(loaded)))
                           };
+                        let amo_wr_rl : bool = match op {
+                            AMOCAS => if ( loaded == rd_val & loaded_high == rd_plus_one_val ) then amo_rd_rl else false,
+                            _      => amo_rd_rl
+                          };
                         let rval : xlenbits = match width {
                           AMO_BYTE   => EXTS(loaded[7..0]),
                           AMO_HALF   => EXTS(loaded[15..0]),
@@ -405,20 +413,20 @@ function clause execute (AMO(op, aq, rl, rs2, rs1, width, rd)) = {
                           AMO_QUAD   => loaded
                         };
                         let wval : MemoryOpResult(bool) = match (width, sizeof(xlen)) {
-                          (AMO_BYTE, _)    => mem_write_value(addr, 1, result[7..0],  aq & rl, rl, true),
-                          (AMO_HALF, _)    => mem_write_value(addr, 2, result[15..0], aq & rl, rl, true),
-                          (AMO_WORD, _)    => mem_write_value(addr, 4, result[31..0], aq & rl, rl, true),
-                          (AMO_DOUBLE, 64) => mem_write_value(addr, 8, result,        aq & rl, rl, true),
-                          (AMO_DOUBLE, 32) => mem_write_value(addr, 4, result,        aq & rl, rl, true),
-                          (AMO_QUAD,   64) => mem_write_value(addr, 8, result,        aq & rl, rl, true),
+                          (AMO_BYTE, _)    => mem_write_value(addr, 1, result[7..0],  aq & rl, amo_wr_rl, true),
+                          (AMO_HALF, _)    => mem_write_value(addr, 2, result[15..0], aq & rl, amo_wr_rl, true),
+                          (AMO_WORD, _)    => mem_write_value(addr, 4, result[31..0], aq & rl, amo_wr_rl, true),
+                          (AMO_DOUBLE, 64) => mem_write_value(addr, 8, result,        aq & rl, amo_wr_rl, true),
+                          (AMO_DOUBLE, 32) => mem_write_value(addr, 4, result,        aq & rl, amo_wr_rl, true),
+                          (AMO_QUAD,   64) => mem_write_value(addr, 8, result,        aq & rl, amo_wr_rl, true),
                           _                => internal_error(__FILE__, __LINE__, "Unexpected AMO width")
                         };
                         match (wval) {
                           MemValue(true)  => {
                             let wval_high : MemoryOpResult(bool) =
                               match (width, sizeof(xlen)) {
-                                (AMO_DOUBLE, 32) => mem_write_value(addr+4, 4, result_high, aq & rl, rl, true),
-                                (AMO_QUAD, 64)   => mem_write_value(addr+8, 8, result_high, aq & rl, rl, true),
+                                (AMO_DOUBLE, 32) => mem_write_value(addr+4, 4, result_high, aq & rl, amo_wr_rl, true),
+                                (AMO_QUAD, 64)   => mem_write_value(addr+8, 8, result_high, aq & rl, amo_wr_rl, true),
                                 _                => MemValue(true)
                               };
                             match (wval_high) {
