@@ -100,12 +100,4 @@ val init_zicfilp_regs : unit -> unit
 function init_zicfilp_regs () = {
   elp = ElpState_to_bits(NO_LP_EXPECTED);
 }
-function update_mstatus_MPELP(o : Mstatus, e : elp_state) -> Mstatus =
-  if sizeof(xlen) == 64
-  then Mk_Mstatus([o.bits() with 41 .. 41 = e])
-  else o
 
-function get_MPELP() -> elp_state =
-  if sizeof(xlen) == 64
-  then mstatus.bits()[41..41]
-  else mstatush.MPELP()

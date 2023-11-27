@@ -392,6 +392,8 @@ val rvfi_trap : unit -> unit
 function rvfi_trap () = ()
 $endif
 
+val zicfilp_preserve_elp : (Privilege) -> unit
+
 /* handle exceptional ctl flow by updating nextPC and operating privilege */
 
 function trap_handler(del_priv : Privilege, intr : bool, c : exc_code, pc : xlenbits, info : option(xlenbits), ext : option(ext_exception))
@@ -401,7 +403,6 @@ function trap_handler(del_priv : Privilege, intr : bool, c : exc_code, pc : xlen
   then print_platform("handling " ^ (if intr then "int#" else "exc#")
                       ^ BitStr(c) ^ " at priv " ^ to_str(del_priv)
                       ^ " with tval " ^ BitStr(tval(info)));
-
   cancel_reservation();
 
   match (del_priv) {
@@ -417,6 +418,7 @@ function trap_handler(del_priv : Privilege, intr : bool, c : exc_code, pc : xlen
 
        cur_privilege   = del_priv;
 
+       zicfilp_preserve_elp(del_priv);
        handle_trap_extension(del_priv, pc, ext);
 
        if   get_config_print_reg()
@@ -442,6 +444,7 @@ function trap_handler(del_priv : Privilege, intr : bool, c : exc_code, pc : xlen
 
        cur_privilege   = del_priv;
 
+       zicfilp_preserve_elp(del_priv);
        handle_trap_extension(del_priv, pc, ext);
 
        if   get_config_print_reg()
@@ -462,6 +465,7 @@ function trap_handler(del_priv : Privilege, intr : bool, c : exc_code, pc : xlen
 
        cur_privilege   = del_priv;
 
+       zicfilp_preserve_elp(del_priv);
        handle_trap_extension(del_priv, pc, ext);
 
        if   get_config_print_reg()
@@ -643,6 +647,8 @@ function init_sys() -> unit = {
   vtype->vlmul()     = 0b000;
 
   init_pmp();
+
+  init_zicfilp_regs();
 
   // log compatibility with spike
   if   get_config_print_reg()

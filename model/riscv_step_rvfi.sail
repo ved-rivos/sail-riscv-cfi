@@ -68,14 +68,9 @@
 /*  SUCH DAMAGE.                                                                         */
 /*=======================================================================================*/
 
-/* Zicfilp extension to fetch */
-val zicfilp_check_if_lpad : (FetchResult) -> FetchResult
-
 /* Step hooks for rvfi. */
 
-function ext_fetch_hook(f : FetchResult) -> FetchResult = {
-  zicfilp_check_if_lpad(f)
-}
+function ext_fetch_hook(f : FetchResult) -> FetchResult = f
 
 function ext_pre_step_hook()  -> unit = ()
 

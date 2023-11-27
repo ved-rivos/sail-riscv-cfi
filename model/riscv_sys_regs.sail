@@ -1036,4 +1036,3 @@ function legalize_mseccfg(c : MSecCfg, value : xlenbits) -> MSecCfg = {
           } else m;
   m
 }
-

@@ -73,6 +73,7 @@
 /* This file specifies the instructions in the 'Zicfilp' extension.   */
 /* ****************************************************************** */
 /* Forward-edge CFI: Landing pads */
+val get_MPELP : (unit) -> elp_state
 /* Sail does not yet support H extension - this needs to be updated to
    support henvcfg for VS when H extension support is included        */
 function zicfilp_xLPE() -> bool = {
@@ -98,7 +99,7 @@ function zicfilp_xLPE() -> bool = {
   else senvcfg.LPE() == 0b1
 }
 /* extension to jalr */
-function zicfilp_update_elp(rs1_reg : regidx, rd_reg : regidx) -> unit = {
+function zicfilp_update_elp(rs1_reg : regidx) -> unit = {
   /* 
    * An indirect branch using JALR, C.JALR, or C.JR with rs1 as x7 is termed
    * a software guarded branch. Such branches do not need to land on a LPAD
@@ -113,22 +114,25 @@ function zicfilp_update_elp(rs1_reg : regidx, rd_reg : regidx) -> unit = {
   if is_lp_expected == true & zicfilp_xLPE()
   then elp = ElpState_to_bits(LP_EXPECTED);
 
+  print("jalr: elp= " ^ BitStr(elp) ^ "   is_lp_expected=" ^ BitStr(bool_to_bits(is_lp_expected)));
 }
 /* AUIPC with rd=x0 is a lpad instruction when zicfilp is active else a no-op */
 function zicfilp_lpad( lpl : bits(20) ) -> Retired = {
    /* expected label is in x7 bits 31:12 */
    let  exp_lbl : bits(20) = x7[31..12];
 
+   print("lpad:elp= " ^ BitStr(elp) ^ "   lpl= " ^ BitStr(lpl) ^ "   x7_31_12= " ^ BitStr(exp_lbl));
+
    if  zicfilp_xLPE() & (elp == ElpState_to_bits(LP_EXPECTED)) then {
        if ( (lpl != exp_lbl) & (lpl != 0b00000000000000000000) )
        then { handle_sw_check_exception(LANDING_PAD_FAULT); RETIRE_FAIL }
-       else {elp = ElpState_to_bits(NO_LP_EXPECTED); RETIRE_SUCCESS };
+       else { elp = ElpState_to_bits(NO_LP_EXPECTED); RETIRE_SUCCESS };
    } else {
      RETIRE_SUCCESS
    }
 }
 /* trap delivery extension */
-function zicfilp_trap_extension(del_priv : Privilege) -> unit = {
+function zicfilp_preserve_elp(del_priv : Privilege) -> unit = {
   /* When a trap is taken into privilege mode x, the xPELP is set
      to ELP and ELP is set to NO_LP_EXPECTED. */
   /* Sail does not have support for Debug mode - this needs to be
@@ -177,3 +181,35 @@ function zicfilp_set_elp_to_spelp() -> unit = {
     mstatus = update_SPELP(mstatus, ElpState_to_bits(NO_LP_EXPECTED));
   }
 }
+/* Check if fetch violates ELP */
+function zicfilp_is_elp_violated() -> bool = {
+   /* landing pad is a AUIPC with rd=x0 */
+   /* When ELP is set to LP_EXPECTED, if the next instruction in
+    * the instruction stream is not 4-byte aligned, or is not LPAD, or
+    * if the landing pad label encoded in LPAD is not zero and does not
+    * match the expected landing pad label in bits 31:12 of the x7
+    * register, then a software-check exception (cause=18) with xtval
+    * set to "landing pad fault (code=2)" is raised else the ELP is
+    * updated to NO_LP_EXPECTED. The label check is performed in
+    * riscv_insts_zicfilp:zicfilp_lpad
+    */
+   if   not(zicfilp_xLPE())
+   then false
+   else if elp != ElpState_to_bits(LP_EXPECTED)
+   then false
+   else if ( (PC[1 .. 0] != 0b00) | (instbits[6..0] != 0b0010111) | (instbits[11..7] != 0b00000) )
+   then true
+   else false
+}
+
+/* helper to update MPELP in mstatus */
+function update_mstatus_MPELP(o : Mstatus, e : elp_state) -> Mstatus =
+  if sizeof(xlen) == 64
+  then Mk_Mstatus([o.bits() with 41 .. 41 = e])
+  else o
+
+/* helpers to get MPELP from mstatus/mstatush */
+function get_MPELP() -> elp_state =
+  if sizeof(xlen) == 64
+  then mstatus.bits()[41..41]
+  else mstatush.MPELP()

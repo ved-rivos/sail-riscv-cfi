@@ -338,12 +338,11 @@ function exceptionType_to_str(e) =
 overload to_str = {exceptionType_to_str}
 
 /* SW check exception codes */
-enum SWCheckCodes = {LANDING_PAD_FAULT, SHADOW_STACK_FAULT}
+enum SWCheckCodes = {LANDING_PAD_FAULT}
 
 function sw_check_code_to_bits (c : SWCheckCodes) -> xlenbits =
   match (c) {
     LANDING_PAD_FAULT  => zero_extend(0b010),
-    SHADOW_STACK_FAULT => zero_extend(0b011)
   }
 
 /* trap modes */

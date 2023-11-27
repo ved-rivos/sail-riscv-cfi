@@ -84,8 +84,6 @@ val init_zicfilp_regs : unit -> unit
 val ext_rvfi_init : unit -> unit
 function ext_rvfi_init () = {
   x1 = x1; // to avoid hook being optimized out
-  /* Zicfilp register state */
-  init_zicfilp_regs();
 }
 
 

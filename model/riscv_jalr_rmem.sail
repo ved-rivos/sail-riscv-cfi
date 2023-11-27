@@ -69,7 +69,7 @@
 /*=======================================================================================*/
 
 /* Zicfilp : Update ELP state */
-val zicfilp_update_elp : (regidx, regidx) -> unit
+val zicfilp_update_elp : (regidx) -> unit
 
 /* The definition for the memory model. */
 
@@ -80,6 +80,6 @@ function clause execute (RISCV_JALR(imm, rs1, rd)) = {
   let newPC : xlenbits = X(rs1) + sign_extend(imm);
   nextPC = [newPC with 0 = bitzero];  /* Clear newPC[0] */
   /* update ELP if Zicfilp is active */
-  zicfilp_update_elp(rs1, rd);
+  zicfilp_update_elp(rs1);
   RETIRE_SUCCESS
 }
