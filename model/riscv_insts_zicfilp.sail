@@ -117,7 +117,7 @@ function zicfilp_update_elp(rs1_reg : regidx) -> unit = {
   print("jalr: elp= " ^ BitStr(elp) ^ "   is_lp_expected=" ^ BitStr(bool_to_bits(is_lp_expected)));
 }
 /* AUIPC with rd=x0 is a lpad instruction when zicfilp is active else a no-op */
-function zicfilp_lpad( lpl : bits(20) ) -> Retired = {
+function clause execute zicfilp_lpad( lpl ) = {
    /* expected label is in x7 bits 31:12 */
    let  exp_lbl : bits(20) = x7[31..12];
 

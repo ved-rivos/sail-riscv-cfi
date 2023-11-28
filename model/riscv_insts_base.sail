@@ -74,31 +74,31 @@
 
 /* ****************************************************************** */
 union clause ast = UTYPE : (bits(20), regidx, uop)
+union clause ast = zicfilp_lpad : (bits(20))
 
 mapping encdec_uop : uop <-> bits(7) = {
   RISCV_LUI   <-> 0b0110111,
   RISCV_AUIPC <-> 0b0010111
 }
 
-mapping clause encdec = UTYPE(imm, rd, op)
-  <-> imm @ rd @ encdec_uop(op)
+/* Zicfilp landing pad lpad is auipc x0, imm */
+function is_lpad(op : uop, rd : regidx) -> bool =
+  haveZicfilp() & rd == zreg & op == RISCV_AUIPC
 
-/* Zicfilp : Landing page label check */
-val zicfilp_lpad :  (bits(20)) -> Retired
+mapping clause encdec = UTYPE(imm, rd, op)
+  <-> imm @ rd @ encdec_uop(op) if not(is_lpad(op, rd))
+
+mapping clause encdec = zicfilp_lpad(imm)
+  <-> imm @ 0b00000 @ 0b0010111
 
 function clause execute UTYPE(imm, rd, op) = {
   let off : xlenbits = sign_extend(imm @ 0x000);
-  /* Zicfilp : AUIPC with rd=x0 is a landing pad */
-  if haveZicfilp() & rd == 0b00000 & op == RISCV_AUIPC then {
-    zicfilp_lpad(imm);
-  } else {
-    let ret : xlenbits = match op {
-      RISCV_LUI   => off,
-      RISCV_AUIPC => get_arch_pc() + off
-    };
-    X(rd) = ret;
-    RETIRE_SUCCESS
+  let ret : xlenbits = match op {
+    RISCV_LUI   => off,
+    RISCV_AUIPC => get_arch_pc() + off
   };
+  X(rd) = ret;
+  RETIRE_SUCCESS
 }
 
 mapping utype_mnemonic : uop <-> string = {
@@ -108,6 +108,9 @@ mapping utype_mnemonic : uop <-> string = {
 
 mapping clause assembly = UTYPE(imm, rd, op)
   <-> utype_mnemonic(op) ^ spc() ^ reg_name(rd) ^ sep() ^ hex_bits_20(imm)
+
+mapping clause assembly = zicfilp_lpad(imm)
+  <-> "lpad" ^ spc() ^ hex_bits_20(imm)
 
 /* ****************************************************************** */
 union clause ast = RISCV_JAL : (bits(21), regidx)
