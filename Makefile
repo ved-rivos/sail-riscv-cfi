@@ -26,7 +26,7 @@ SAIL_CHECK_SRCS = riscv_addr_checks_common.sail riscv_addr_checks.sail riscv_mis
 SAIL_DEFAULT_INST = riscv_insts_base.sail riscv_insts_aext.sail riscv_insts_cext.sail riscv_insts_mext.sail riscv_insts_zicsr.sail riscv_insts_next.sail riscv_insts_hints.sail
 SAIL_DEFAULT_INST += riscv_insts_fext.sail riscv_insts_cfext.sail
 SAIL_DEFAULT_INST += riscv_insts_dext.sail riscv_insts_cdext.sail
-
+SAIL_DEFAULT_INST += riscv_insts_ctr.sail
 SAIL_DEFAULT_INST += riscv_insts_svinval.sail
 
 SAIL_DEFAULT_INST += riscv_insts_zba.sail
@@ -68,6 +68,7 @@ SAIL_RMEM_INST_SRCS = riscv_insts_begin.sail $(SAIL_RMEM_INST) riscv_insts_end.s
 SAIL_SYS_SRCS =  riscv_csr_map.sail
 SAIL_SYS_SRCS += riscv_vext_control.sail    # helpers for the 'V' extension
 SAIL_SYS_SRCS += riscv_next_regs.sail
+SAIL_SYS_SRCS += riscv_ctr_regs.sail
 SAIL_SYS_SRCS += riscv_sys_exceptions.sail  # default basic helpers for exception handling
 SAIL_SYS_SRCS += riscv_sync_exception.sail  # define the exception structure used in the model
 SAIL_SYS_SRCS += riscv_next_control.sail    # helpers for the 'N' extension
