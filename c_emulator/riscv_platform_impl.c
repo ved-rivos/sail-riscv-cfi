@@ -6,6 +6,10 @@
 uint64_t rv_pmp_count = 0;
 uint64_t rv_pmp_grain = 0;
 
+uint64_t rv_valid_ctr_depth = 0x1F;
+bool rv_enable_smctr = true;
+bool rv_enable_ssctr = true;
+
 bool rv_enable_svinval = false;
 bool rv_enable_zcb = false;
 bool rv_enable_zfinx = false;

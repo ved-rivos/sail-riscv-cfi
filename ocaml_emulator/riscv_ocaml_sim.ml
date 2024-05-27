@@ -89,6 +89,15 @@ let options = Arg.align ([("-dump-dts",
                           ("-with-dtc",
                            Arg.String PI.set_dtc,
                            " full path to dtc to use")
+                          ("-enable-smctr",
+                           Arg.Set P.config_enable_smctr,
+                           " enable Smctr extension");
+                          ("-enable-ssctr",
+                           Arg.Set P.config_enable_ssctr,
+                           " enable Ssctr extension");
+                          ("-valid-ctr-depth",
+                           Arg.Int P.set_config_valid_ctr_depth,
+                           " valid CTR depths");
                          ])
 
 let usage_msg = "RISC-V platform options:"

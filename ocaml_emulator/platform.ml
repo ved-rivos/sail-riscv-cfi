@@ -12,6 +12,9 @@ let config_enable_misaligned_access    = ref false
 let config_mtval_has_illegal_inst_bits = ref false
 let config_enable_svinval              = ref false
 let config_enable_zcb                  = ref false
+let config_enable_smctr                = ref false
+let config_enable_ssctr                = ref false
+let config_valid_ctr_depth             = ref Big_int.zero
 let config_enable_writable_fiom        = ref true
 let config_enable_vext                 = ref true
 let config_pmp_count                   = ref Big_int.zero
@@ -19,6 +22,8 @@ let config_pmp_grain                   = ref Big_int.zero
 
 let set_config_pmp_count x = config_pmp_count := Big_int.of_int x
 let set_config_pmp_grain x = config_pmp_grain := Big_int.of_int x
+
+let set_valid_ctr_depth x = config_valid_ctr_depth := Big_int.of_int x
 
 let platform_arch = ref P.RV64
 
@@ -92,6 +97,9 @@ let enable_misaligned_access ()      = !config_enable_misaligned_access
 let mtval_has_illegal_inst_bits ()   = !config_mtval_has_illegal_inst_bits
 let enable_svinval ()                = !config_enable_svinval
 let enable_zcb ()                    = !config_enable_zcb
+let enable_smctr ()                  = !config_enable_smctr
+let enable_ssctr ()                  = !config_enable_ssctr
+let valid_ctr_depth ()               = !config_valid_ctr_depth
 let enable_zfinx ()                  = false
 let enable_writable_fiom ()          = !config_enable_writable_fiom
 let pmp_count ()                     = !config_pmp_count

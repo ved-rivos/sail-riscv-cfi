@@ -6,6 +6,9 @@
 /*  SPDX-License-Identifier: BSD-2-Clause                                                */
 /*=======================================================================================*/
 
+/* Support CTR depths - if bit n is set then CTR depth 2^n is supported */
+val sys_valid_ctr_depth = {c: "sys_valid_ctr_depth", ocaml: "Platform.valid_ctr_depth", _: "sys_valid_ctr_depth"} : unit -> bits(64)
+
 /* Architectural state for the Ssctr and Smctr standard extension. */
 bitfield Mctrctl : bits(64) = {
   DIRLJMPINH : 47,
@@ -75,7 +78,8 @@ bitfield Ctrtarget : xlenbits = {
   MISP       : 0
 }
 bitfield Ctrdata : bits(64) = {
-  CC         : 31 .. 16,
+  CCE        : 31 .. 28,
+  CCM        : 27 .. 16,
   CCV        : 15,
   TYPE       : 3 .. 0
 }
@@ -86,7 +90,8 @@ register mctrctl    : Mctrctl
 register ctrsource  : vector(256, dec, Ctrsource)
 register ctrtarget  : vector(256, dec, Ctrtarget)
 register ctrdata    : vector(256, dec, Ctrdata)
-register ctr_cycle_counter : bits(64)
+/* Should parameterize the cycle counter to support wider counters */
+register ctr_cycle_counter : bits(13)
 register ctr_cycle_counter_valid : bool
 
 function legalize_mctrctl(o : Mctrctl, v : xlenbits) -> Mctrctl = {
@@ -105,12 +110,6 @@ function legalize_sctrctl(m : Mctrctl, v : xlenbits) -> Mctrctl = {
   o
 }
 
-/* Support CTR depths - if bit n is set then CTR depth 2^n is supported */
-val sys_ctr_depth_16_legal = {c: "sys_ctr_depth_16_legal", ocaml: "Platform.ctr_depth_16_legal", _: "sys_ctr_depth_16_legal"} : unit -> bool
-val sys_ctr_depth_32_legal = {c: "sys_ctr_depth_32_legal", ocaml: "Platform.ctr_depth_32_legal", _: "sys_ctr_depth_32_legal"} : unit -> bool
-val sys_ctr_depth_64_legal = {c: "sys_ctr_depth_64_legal", ocaml: "Platform.ctr_depth_64_legal", _: "sys_ctr_depth_64_legal"} : unit -> bool
-val sys_ctr_depth_128_legal = {c: "sys_ctr_depth_128_legal", ocaml: "Platform.ctr_depth_128_legal", _: "sys_ctr_depth_128_legal"} : unit -> bool
-val sys_ctr_depth_256_legal = {c: "sys_ctr_depth_256_legal", ocaml: "Platform.ctr_depth_256_legal", _: "sys_ctr_depth_256_legal"} : unit -> bool
 
 function get_wrptr_mask(d : Sctrdepth) -> bits(8) =
   match(d[DEPTH]) {
@@ -123,12 +122,13 @@ function get_wrptr_mask(d : Sctrdepth) -> bits(8) =
   }
 
 function legalize_sctrdepth(s : Sctrdepth, v : xlenbits) -> Sctrdepth = {
+  let valid_ctr_depth : bits(64) = sys_valid_ctr_depth();
   let depth : bits(3) = match(v[2 .. 0]) {
-    0b000 => if sys_ctr_depth_16_legal()  then v[2 .. 0] else s[DEPTH],
-    0b001 => if sys_ctr_depth_32_legal()  then v[2 .. 0] else s[DEPTH],
-    0b010 => if sys_ctr_depth_64_legal()  then v[2 .. 0] else s[DEPTH],
-    0b011 => if sys_ctr_depth_128_legal() then v[2 .. 0] else s[DEPTH],
-    0b100 => if sys_ctr_depth_256_legal() then v[2 .. 0] else s[DEPTH],
+    0b000 => if bit_to_bool(valid_ctr_depth[0]) then v[2 .. 0] else s[DEPTH],
+    0b001 => if bit_to_bool(valid_ctr_depth[1]) then v[2 .. 0] else s[DEPTH],
+    0b010 => if bit_to_bool(valid_ctr_depth[2]) then v[2 .. 0] else s[DEPTH],
+    0b011 => if bit_to_bool(valid_ctr_depth[3]) then v[2 .. 0] else s[DEPTH],
+    0b100 => if bit_to_bool(valid_ctr_depth[4]) then v[2 .. 0] else s[DEPTH],
         _ => s[DEPTH]
   };
   let o = Mk_Sctrdepth(zero_extend(depth));
@@ -138,22 +138,28 @@ function legalize_sctrdepth(s : Sctrdepth, v : xlenbits) -> Sctrdepth = {
 
   o
 }
-
 function legalize_sctrstatus(s : Sctrstatus, v : xlenbits) -> Sctrstatus = {
   let wrptr_mask : bits(8) = get_wrptr_mask(sctrdepth);
   let o = Mk_Sctrstatus(zeros());
   let o = [o with WRPTR = (v[7 .. 0] & wrptr_mask), FROZEN = v[31 .. 31]];
   o
 }
-
+function number_of_ctr() -> int = {
+  let valid_ctr_depth : bits(64) = sys_valid_ctr_depth();
+  let num = if bit_to_bool(valid_ctr_depth[0]) then 16 else 0;
+  let num = if bit_to_bool(valid_ctr_depth[1]) then 32 else num;
+  let num = if bit_to_bool(valid_ctr_depth[2]) then 64 else num;
+  let num = if bit_to_bool(valid_ctr_depth[3]) then 128 else num;
+  let num = if bit_to_bool(valid_ctr_depth[4]) then 256 else num;
+  num
+}
 function isValidCtrMiselect() -> bool = {
   let ctr_select = miselect.bits[7 .. 0];
-  haveSmctr() & (unsigned(ctr_select) < sys_ctr_count())
+  haveSmctr() & (unsigned(ctr_select) < number_of_ctr())
 }
-
 function isValidCtrSiselect() -> bool = {
   let ctr_select = siselect.bits[7 .. 0];
-  haveSsctr() & (unsigned(ctr_select) < sys_ctr_count())
+  haveSsctr() & (unsigned(ctr_select) < number_of_ctr())
 }
 /* Logical entry N, selected by *iselect value of (0x200 | N), is
  * physically at ((WRPTR - N - 1) % depth) where depth = 2^(DEPTH+4)

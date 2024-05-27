@@ -82,9 +82,12 @@ function is_ctr_active(priv : Privilege) -> bool =
 val get_wrptr_mask : Sctrdepth -> bits(8)
 
 function update_ctr(transfer_type : ctr_xfer_type, src_recorded : bool, dst_recorded : bool) -> unit = {
-  let src_pc  : xlenbits   = if src_recorded then get_arch_pc() else zeros();
-  let tgt_pc  : xlenbits   = if dst_recorded then get_next_pc() else zeros();
-  let ras_emu : bool       = mctrctl[RASEMU] == 0b1;
+  let src_pc  : xlenbits = if src_recorded then get_arch_pc() else zeros();
+  let tgt_pc  : xlenbits = if dst_recorded then get_next_pc() else zeros();
+  let ras_emu : bool     = mctrctl[RASEMU] == 0b1;
+  let cce     : bits(1)  = ctr_cycle_counter[12 .. 12];
+  let ccm     : bits(12) = ctr_cycle_counter[11 .. 0];
+  let ccv     : bits(1)  = if ctr_cycle_counter_valid & not(ras_emu) then 0b1 else 0b0;
 
   /* Transfer type filtering */
   let is_transfer_type_enabled : bool = match transfer_type {
@@ -115,8 +118,11 @@ function update_ctr(transfer_type : ctr_xfer_type, src_recorded : bool, dst_reco
   if is_transfer_type_enabled & do_push then {
     ctrsource[unsigned(sctrstatus[WRPTR])] = Mk_Ctrsource(src_pc[(sizeof(xlen) - 1) .. 1] @ 0b1);
     ctrtarget[unsigned(sctrstatus[WRPTR])] = Mk_Ctrtarget(tgt_pc[(sizeof(xlen) - 1) .. 1] @ 0b0);
-    ctrdata[unsigned(sctrstatus[WRPTR])]   = Mk_Ctrdata(zero_extend(encdec_ctr_xfer_type(transfer_type))); /* TODO: CC and CCV */
+    ctrdata[unsigned(sctrstatus[WRPTR])]   = 
+      Mk_Ctrdata(zero_extend(cce @ ccm @ ccv @ 0b00000000000 @ encdec_ctr_xfer_type(transfer_type)));
     sctrstatus[WRPTR]                      = (sctrstatus[WRPTR] + 1) & get_wrptr_mask(sctrdepth);
+    ctr_cycle_counter = zeros();
+    cycle_counter_valid = false;
   }
 }
 
@@ -185,5 +191,13 @@ function update_ctr_trap_return(prev_priv : Privilege) -> unit = {
   then update_ctr(TRAP_RETURN, true, true)
   else if is_src_ctr_enabled & not(is_dst_ctr_enabled)
   then update_ctr(TRAP_RETURN, true, false)
+}
+/* model implements a 13-bit cycle counter */
+function count_ctr_cycles() -> unit = {
+  if is_ctr_active(cur_privilege) then {
+    if unsigned(ctr_cycle_counter) < 8191
+    then ctr_cycle_counter = ctr_cycle_counter + 1;
+    ctr_cycle_counter_valid = true;
+  }
 }
 

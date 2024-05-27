@@ -995,7 +995,6 @@ function legalize_iselect(s : SMiselect, v: xlenbits) -> SMiselect = {
   s
 }
 
-val sys_ctr_count = {c: "sys_ctr_count", ocaml: "Platform.ctr_count", _: "sys_ctr_count"} : unit -> range(0, 256)
 val isValidCtrMiselect: unit -> bool
 val isValidCtrSiselect: unit -> bool
 function isValidMiselect() -> bool = {
